@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace AsyncTwitch
 {
-    class Program
+    class AsyncTwitch
     {
         static void Main(string[] args)
         {
