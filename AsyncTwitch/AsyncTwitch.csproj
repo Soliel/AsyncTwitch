@@ -42,8 +42,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Program.cs" />
+    <Compile Include="AsyncTwitch.cs" />
+    <Compile Include="ChatUser.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TwitchConnection.cs" />
+    <Compile Include="TwitchEmote.cs" />
+    <Compile Include="TwitchMessage.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
