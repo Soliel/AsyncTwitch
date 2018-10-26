@@ -1,28 +1,26 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using UnityEngine;
 
 namespace AsyncTwitch
 {
-    public abstract class IRCConnection
+    public abstract class IrcConnection : MonoBehaviour
     {
         /*
-         * Everyone say thanks to umbra for all his help with this!
+         * Everyone say thanks to Umbranoxio for all his help with this!
          */
         #region Private Vars
         private const int BUFFER_SIZE = 8192;
         private readonly byte[] EOF = new byte[] { 13, 10};
-        private Encoding Utf8NoBOM = new UTF8Encoding(false);
 
         private byte[] _buffer = new byte[BUFFER_SIZE];
         private Socket _twitchSocket;
         private Queue<byte[]> _recievedQueue = new Queue<byte[]>();
 
-        private object _readLock = new object();
+        private readonly object _readLock = new object();
         private bool _reading = false;
         #endregion
 
@@ -92,26 +90,27 @@ namespace AsyncTwitch
                 if (!_reading)
                 {
                     _reading = true;
-                    ThreadPool.QueueUserWorkItem(new WaitCallback(ProcessReceived));
+                    ThreadPool.QueueUserWorkItem(ProcessReceived);
                 }
             }
 
-            _twitchSocket.BeginReceive(_buffer, 0, BUFFER_SIZE, SocketFlags.None, new AsyncCallback(Recieve), null);
+            _twitchSocket.BeginReceive(_buffer, 0, BUFFER_SIZE, SocketFlags.None, Recieve, null);
         }
 
-        internal void Send(String data)
+        internal void Send(string data)
         {
             List<byte> byteData = new List<byte>(Encoding.ASCII.GetBytes(data));
             byteData.AddRange(EOF);
-            _twitchSocket.BeginSend(byteData.ToArray(), 0, byteData.Count, 0, new AsyncCallback(SendCallback), null);
+            _twitchSocket.BeginSend(byteData.ToArray(), 0, byteData.Count, 0, SendCallback, null);
         }
 
         private void SendCallback(IAsyncResult ar)
         {
             try
             {
-                int bytesSend = _twitchSocket.EndSend(ar);
-            } catch (Exception e)
+                _twitchSocket.EndSend(ar);
+            }
+            catch (Exception e)
             {
                 Console.WriteLine(e.ToString());
             }
@@ -204,11 +203,11 @@ namespace AsyncTwitch
         //This is really fast for how simple it is.
         public int FindBytePattern(byte[] source, byte[] search, int offset)
         {
-            var searchLimit = (source.Length - offset) - search.Length; //If we haven't found a match by this point we wont.
+            int searchLimit = (source.Length - offset) - search.Length; //If we haven't found a match by this point we wont.
 
-            for (var i = offset; i <= searchLimit; i++)
+            for (int i = offset; i <= searchLimit; i++)
             {
-                var x = 0;
+                int x = 0;
                 for (; x < search.Length; x++) //Iterate through the array after index i until we fully match search or find a difference.
                 {
                     if (search[x] != source[i + x]) break;
