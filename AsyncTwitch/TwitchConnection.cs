@@ -30,7 +30,6 @@ namespace AsyncTwitch
         private Regex _badgeRX = new Regex(@"(?<=\@badges=|,)\w+\/\d+", RegexOptions.Compiled);
         private Regex _messageRX = new Regex(@"(?<=[A-Za-z0-9]+![A-Za-z0-9]+\@[A-Za-z0-9]+\.tmi\.twitch\.tv\sPRIVMSG\s#\w+\s:).+", RegexOptions.Compiled);
         private Regex _emoteRX = new Regex(@"(?<=;emotes=|\/)(\d+):(\d+-\d+[,/;])+", RegexOptions.Compiled);
-        private Regex _bitsRX = new Regex(@"", RegexOptions.Compiled);
         #endregion
 
         public static void OnLoad()
@@ -58,7 +57,6 @@ namespace AsyncTwitch
 
         public override void OnConnect()
         {
-               
         }
 
         public override void ProcessMessage(byte[] msg)

@@ -18,7 +18,7 @@ namespace AsyncTwitch
 
         private byte[] _buffer = new byte[BUFFER_SIZE];
         private Socket _twitchSocket;
-        private Queue<byte[]> _recievedQueue = new Queue<byte[]>();
+        private Queue<byte[]> _receivedQueue = new Queue<byte[]>();
 
         private readonly object _readLock = new object();
         private bool _reading = false;
@@ -38,11 +38,11 @@ namespace AsyncTwitch
         {
             _twitchSocket.EndConnect(ar);
             if(!_twitchSocket.Connected) return;
-            _twitchSocket.BeginReceive(_buffer, 0, BUFFER_SIZE, SocketFlags.None, new AsyncCallback(Recieve), null);
+            _twitchSocket.BeginReceive(_buffer, 0, BUFFER_SIZE, SocketFlags.None, new AsyncCallback(Receive), null);
             OnConnect();
         }
 
-        private void Recieve(IAsyncResult ar)
+        private void Receive(IAsyncResult ar)
         {
             int byteLength;
             try
@@ -66,12 +66,12 @@ namespace AsyncTwitch
                 return;
             }
 
-            var recievedBytes = new byte[byteLength];
+            var receivedBytes = new byte[byteLength];
 
             //Copy can fail so we wrap in a try catch. If it does our network data isn't worth looking at anymore so we reconnect.
             try
             {
-                Array.Copy(_buffer, recievedBytes, recievedBytes.Length); //Free up our buffer as fast as possible.
+                Array.Copy(_buffer, receivedBytes, receivedBytes.Length); //Free up our buffer as fast as possible.
             }
             catch (Exception e)
             {
@@ -81,8 +81,8 @@ namespace AsyncTwitch
             }
 
             //Queue our bytes to send to another thread. Lock the queue for thread safety.
-            lock(_recievedQueue)
-                _recievedQueue.Enqueue(recievedBytes);
+            lock(_receivedQueue)
+                _receivedQueue.Enqueue(receivedBytes);
 
             //lock readlock while we queue the process. 
             lock (_readLock)
@@ -94,7 +94,7 @@ namespace AsyncTwitch
                 }
             }
 
-            _twitchSocket.BeginReceive(_buffer, 0, BUFFER_SIZE, SocketFlags.None, Recieve, null);
+            _twitchSocket.BeginReceive(_buffer, 0, BUFFER_SIZE, SocketFlags.None, Receive, null);
         }
 
         internal void Send(string data)
@@ -130,16 +130,16 @@ namespace AsyncTwitch
             {
                 if (nextBytes == 0 && readBytes == 0)
                 {
-                    lock (_recievedQueue)
+                    lock (_receivedQueue)
                     {
-                        if (_recievedQueue.Count == 0)
+                        if (_receivedQueue.Count == 0)
                         {
                             _reading = false;
                             break;
                         }
 
-                        nextBytes = _recievedQueue.Peek().Length;
-                        nextBuffer = _recievedQueue.Dequeue();
+                        nextBytes = _receivedQueue.Peek().Length;
+                        nextBuffer = _receivedQueue.Dequeue();
                     }
                 }
 

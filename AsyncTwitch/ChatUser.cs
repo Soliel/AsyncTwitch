@@ -12,15 +12,18 @@ namespace AsyncTwitch
         public string UserID { get;  }
         //If the user is a moderator in the channel.
         public bool IsMod { get; }
+        //If the user is the broadcaster.
+        public bool IsBroadcaster { get; }
         //All the badges the user has.
         public string[] Badges { get; }
 
-        public ChatUser(string displayName, string color, string userId, bool isMod, string[] badges)
+        public ChatUser(string displayName, string color, string userId, bool isMod, bool isBroadcaster, string[] badges)
         {
             DisplayName = displayName;
             Color = color;
             UserID = userId;
             IsMod = isMod;
+            IsBroadcaster = isBroadcaster;
             Badges = badges;
         }
     }
