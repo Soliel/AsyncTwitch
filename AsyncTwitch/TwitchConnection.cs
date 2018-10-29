@@ -17,6 +17,7 @@ namespace AsyncTwitch
         public static TwitchConnection Instance;
 
         public Encoding _utf8noBOM = new UTF8Encoding(false);
+        public RoomState roomState = new RoomState();
 
         private readonly TimeSpan RateLimit = new TimeSpan(0, 0, 0, 1 ,500); //How long since the last message before we send another.
         private Config _loginInfo;
@@ -30,6 +31,7 @@ namespace AsyncTwitch
         private Regex _badgeRX = new Regex(@"(?<=\@badges=|,)\w+\/\d+", RegexOptions.Compiled);
         private Regex _messageRX = new Regex(@"(?<=[A-Za-z0-9]+![A-Za-z0-9]+\@[A-Za-z0-9]+\.tmi\.twitch\.tv\sPRIVMSG\s#\w+\s:).+", RegexOptions.Compiled);
         private Regex _emoteRX = new Regex(@"(?<=;emotes=|\/)(\d+):(\d+-\d+[,/;])+", RegexOptions.Compiled);
+        private Regex _roomStateRX = new Regex(@"@(?<Tags>.+)\s:tmi.twitch.tv ROOMSTATE #[A-Za-z0-9]+", RegexOptions.Compiled);
         #endregion
 
         public static void OnLoad()
@@ -67,21 +69,39 @@ namespace AsyncTwitch
             string stringMsg = _utf8noBOM.GetString(msg);
             Console.WriteLine(stringMsg);
             if (FilterJoinPart(stringMsg)) return;
+            if (_roomStateRX.IsMatch(stringMsg))
+                FilterRoomState(stringMsg);
         }
 
         private bool FilterJoinPart(string msg)
         {
             if(_joinRX.IsMatch(msg))
             {
-
+                _joinRX.Match(msg).Groups["User"];
                 return true;
             }
             else if(_partRX.IsMatch(msg))
             {
+                _partRX.Match(msg).Groups["User"];
                 return true;
             }
             return false;
-        } 
+        }
+
+        private bool FilterRoomState(string msg)
+        {
+            string Tags = _roomStateRX.Match(msg).Groups["Tags"];
+            string[] TagArray = Tags.Split(";");
+            foreach(var Tag in TagArray)
+            {
+                var TagParts = Tag.Split("=");
+                switch(TagParts[0])
+                {
+                    case "broadcaster-lang":
+                        
+                }
+            }
+        }
 
         //This is a simple Queueing system to avoid the ratelimit.
         //We can expand upon this later by finding how many messages we've sent in the last 30 seconds.
