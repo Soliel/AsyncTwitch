@@ -158,8 +158,9 @@ namespace AsyncTwitch
                         nextBytes -= loadBytes;
                         readBytes += loadBytes;
                     }
-                    catch
+                    catch(Exception e)
                     {
+                        Console.WriteLine(e.ToString());
                         //disconnect
                         break;
                     }
@@ -175,8 +176,9 @@ namespace AsyncTwitch
                 {
                     Array.Copy(readBuffer, 0, processedData, 0, offset); //Copy till EOF 
                 }
-                catch
+                catch(Exception e)
                 {
+                    Console.WriteLine(e.ToString());
                     //disconnect 
                     break;
                 }

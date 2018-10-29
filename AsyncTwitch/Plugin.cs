@@ -1,9 +1,4 @@
 ﻿using IllusionPlugin;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace AsyncTwitch
 {
@@ -27,6 +22,8 @@ namespace AsyncTwitch
 
         public void OnLevelWasInitialized(int level)
         {
+            if (level != 0) return;
+            TwitchConnection.OnLoad();
         }
 
         public void OnLevelWasLoaded(int level)

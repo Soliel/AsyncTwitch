@@ -9,7 +9,7 @@ namespace AsyncTwitch
 {
     public class TwitchConnection :  IrcConnection
     {
-        public static event Action<TwitchConnection, TwitchMessage> OnMessageRecieved;
+        public static event Action<TwitchConnection, TwitchMessage> OnMessageReceived;
         public static event Action<TwitchConnection> OnConnected;
         public static event Action<TwitchConnection, ChatUser> OnChatJoined;
         public static event Action<TwitchConnection, ChatUser> OnChatParted;
@@ -22,7 +22,7 @@ namespace AsyncTwitch
         private Config _loginInfo;
         private bool _isConnected;
         private Queue<string> _messageQueue = new Queue<string>();
-        private DateTime _lastMessageTime = DateTime.MinValue;
+        private DateTime _lastMessageTime = DateTime.Now;
 
         #region REGEX Lines
         private Regex _joinRX = new Regex(@"^:(?<User>[A-Za-z0-9]+)![A-Za-z0-9]+@[A-Za-z0-9]+\.tmi\.twitch\.tv\sJOIN\s", RegexOptions.Compiled);
@@ -41,7 +41,7 @@ namespace AsyncTwitch
         private void Awake()
         {
             Instance = this;
-
+            StartConnection();
         }
 
         public void StartConnection()
@@ -50,21 +50,23 @@ namespace AsyncTwitch
 
             _loginInfo = Config.LoadFromJSON();
             if (_loginInfo.Username == "") return;
-
             Connect("irc.twitch.tv", 6667);
             _isConnected = true;
         }
 
         public override void OnConnect()
         {
+            SendRawMessage("CAP REQ :twitch.tv/membership twitch.tv/commands twitch.tv/tags");
+            SendRawMessage("PASS " + _loginInfo.OauthKey);
+            SendRawMessage("NICK " + _loginInfo.Username);
+            SendRawMessage("JOIN #" + _loginInfo.ChannelName);
         }
 
         public override void ProcessMessage(byte[] msg)
         {
             string stringMsg = _utf8noBOM.GetString(msg);
+            Console.WriteLine(stringMsg);
             if (FilterJoinPart(stringMsg)) return;
-
-
         }
 
         private bool FilterJoinPart(string msg)
