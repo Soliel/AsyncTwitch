@@ -46,7 +46,7 @@ namespace AsyncTwitch
         private void Awake()
         {
             Instance = this;
-            StartConnection();
+            //StartConnection(); | Debug stuff
         }
 
         #region EventCallbacks
@@ -106,7 +106,7 @@ namespace AsyncTwitch
         public override void ProcessMessage(byte[] msg)
         {
             string stringMsg = _utf8noBOM.GetString(msg);
-            Console.WriteLine(stringMsg);
+            //Console.WriteLine(stringMsg);
             if (FilterJoinPart(stringMsg)) return;
             if (_roomStateRX.IsMatch(stringMsg))
             {
