@@ -81,8 +81,10 @@ namespace AsyncTwitch
             }
 
             //Queue our bytes to send to another thread. Lock the queue for thread safety.
-            lock(_receivedQueue)
+            lock (_receivedQueue)
+            {
                 _receivedQueue.Enqueue(receivedBytes);
+            }
 
             //lock readlock while we queue the process. 
             lock (_readLock)
@@ -165,7 +167,6 @@ namespace AsyncTwitch
                         break;
                     }
                 }
-
                 if (readBytes == 0) continue; //If readBytes has no data we wanna skip this loop.
 
                 //By this point readBuffer should have some data we can operate on.
@@ -194,8 +195,9 @@ namespace AsyncTwitch
                     Array.Copy(readBuffer, offset + 2, readBuffer, 0, readBytes - (offset + 2));
                     readBytes -= (offset + 2);
                 }
-                catch
+                catch(Exception e)
                 {
+                    Console.WriteLine(e.ToString());
                     //disconnect
                     break;
                 }

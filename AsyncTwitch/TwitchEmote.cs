@@ -5,7 +5,7 @@ namespace AsyncTwitch
     public struct TwitchEmote
     {
         //The full id of the emote.
-        public string Id { get; }
+        public string Id { get; set; }
 
         /*
          * A 2D array of Emote positions
@@ -16,7 +16,7 @@ namespace AsyncTwitch
          * Going back to our first example:
          * Index[0][0] = 0, Index[0][1] = 4, Index[1][0] = 19, Index[1][1] = 24
          */
-        public string[][] Index { get; }
+        public string[][] Index { get; set; }
 
         public TwitchEmote(string id, string[][] index)
         {

@@ -14,10 +14,10 @@ namespace AsyncTwitch
      * Holding this time is because in rooms with > 100 chatters JOIN and PART messages are not sent for normal users,
      * So we need another way to keep track. 
      */
-    public struct RoomState
+    public class RoomState
     {
         //The Language of the broadcaster, e.g. en or fi
-        public string BroadcasterLang { get; }
+        public string BroadcasterLang { get; set; }
         //Is Emote only mode on?
         public bool EmoteOnly { get; set; }
         //Followers Only, valid values are -1(disabled), 0(all followers can chat) or
@@ -33,15 +33,14 @@ namespace AsyncTwitch
         public List<ChatUserListing> UserList { get; private set; }
         private Timer _cleaningTimer; //We have to keep a refrence to the timer to avoid garbage collection.
 
-
-        public RoomState(string lang, bool emoteOnly, int followersOnly, bool r9KMode, int slowMode, bool subOnly)
+        public RoomState()
         {
-            BroadcasterLang = lang;
-            EmoteOnly = emoteOnly;
-            FollowersOnly = followersOnly;
-            R9KMode = r9KMode;
-            SlowMode = slowMode;
-            SubOnly = subOnly;
+            BroadcasterLang = "";
+            EmoteOnly = false;
+            FollowersOnly = 0;
+            R9KMode = false;
+            SlowMode = 0;
+            SubOnly = false;
 
             UserList = new List<ChatUserListing>();
             _cleaningTimer = null;
@@ -52,24 +51,64 @@ namespace AsyncTwitch
 
         private void RemoveInactiveUsers(object chatListing)
         {
-            List<ChatUserListing> userList = (List<ChatUserListing>) chatListing;
-            userList.RemoveAll(x => (!x.User.IsMod && !x.User.IsBroadcaster) && DateTime.Now - x.LastMsgTime >= TimeSpan.FromMinutes(30));
-            UserList = userList;
+            try
+            {
+                List<ChatUserListing> userList = (List<ChatUserListing>) chatListing;
+                userList.RemoveAll(x =>
+                    (!x.User.IsMod && !x.User.IsBroadcaster) &&
+                    DateTime.Now - x.LastMsgTime >= TimeSpan.FromMinutes(30));
+                UserList = userList;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
         }
 
         //If someone is being added to the list we can assume they just sent a message.
         public void AddUserToList(ChatUser user)
         {
-            UserList.Add(new ChatUserListing(user, DateTime.Now));
+            try
+            {
+                UserList.Add(new ChatUserListing(user, DateTime.Now));
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
         }
 
-        public void RemoveUserFromList(string userID)
+        public void RemoveUserFromList(string displayName)
         {
-            UserList.RemoveAll(x => x.User.UserID == userID);
+            try
+            {
+                UserList.RemoveAll(x => x.User.DisplayName == displayName);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
+        }
+
+        public override string ToString()
+        {
+            string returnString = "Broadcaster Language: " + BroadcasterLang +
+                                  "\nEmote Only Mode: " + EmoteOnly +
+                                  "\nFollowers Only: " + FollowersOnly +
+                                  "\nSubscribers Only: " + SubOnly +
+                                  "\nR9K Mode: " + R9KMode +
+                                  "\nSlow Mode: " + SlowMode + "\n\n";
+
+            foreach (ChatUserListing chatUserListing in UserList)
+            {
+                returnString += chatUserListing.ToString();
+            }
+
+            return returnString;
         }
     }
 
-    public struct ChatUserListing
+    public class ChatUserListing
     {
         public ChatUser User { get; set; }
         public DateTime LastMsgTime { get; set; }
@@ -78,6 +117,26 @@ namespace AsyncTwitch
         {
             User = user;
             LastMsgTime = lastMessageTime;
+        }
+
+        public ChatUserListing()
+        {
+            User = new ChatUser();
+            LastMsgTime = DateTime.MinValue;
+        }
+
+        public void UpdateTime()
+        {
+            LastMsgTime = DateTime.Now;
+        }
+
+        public override string ToString()
+        {
+            string returnString = "Chat User Listing: \n";
+            returnString += User.ToString();
+            returnString += "\n\nLast Message: " + LastMsgTime;
+
+            return returnString;
         }
     }
 }
