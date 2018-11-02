@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Linq.Expressions;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using UnityEngine;
+
+/*
+ * TODO: Logging.
+ */
 
 namespace AsyncTwitch
 {
@@ -33,7 +35,7 @@ namespace AsyncTwitch
         private Regex _partRX = new Regex(@"^:(?<User>[A-Za-z0-9]+)![A-Za-z0-9]+@[A-Za-z0-9]+\.tmi\.twitch\.tv\sPART\s", RegexOptions.Compiled);
         private Regex _badgeRX = new Regex(@"(?<=\@badges=|,)\w+\/\d+", RegexOptions.Compiled);
         //private Regex _messageRX = new Regex(@"(?<=[A-Za-z0-9]+![A-Za-z0-9]+\@[A-Za-z0-9]+\.tmi\.twitch\.tv\sPRIVMSG\s#\w+\s:).+", RegexOptions.Compiled);
-        private Regex _emoteRX = new Regex(@"(?<=;emotes=|\/)(\d+):(\d+-\d+[,/;])+", RegexOptions.Compiled);
+        private Regex _emoteRX = new Regex(@"(?<=;emotes=)\d+:(\d+-\d+[,/;])+", RegexOptions.Compiled);
         private Regex _roomStateRX = new Regex(@"@(?<Tags>.+)\s:tmi.twitch.tv ROOMSTATE #[A-Za-z0-9]+", RegexOptions.Compiled);
         #endregion
 
@@ -46,38 +48,38 @@ namespace AsyncTwitch
         private void Awake()
         {
             Instance = this;
-            //StartConnection(); | Debug stuff
+            StartConnection(); //| Debug stuff
         }
 
         #region EventCallbacks
 
         private void OnConnectedEventCallback(IAsyncResult ar)
         {
-            Console.WriteLine("Connected Callback");
+            //Console.WriteLine("Connected Callback");
             OnConnected.EndInvoke(ar);
         }
 
         private void OnJoinEventCallback(IAsyncResult ar)
         {
-            Console.WriteLine("Join Callback");
+            //Console.WriteLine("Join Callback");
             OnChatJoined.EndInvoke(ar);
         }
 
         private void OnPartEvenCallback(IAsyncResult ar)
         {
-            Console.WriteLine("Part Callback");
+            //Console.WriteLine("Part Callback");
             OnChatParted.EndInvoke(ar);
         }
 
         private void OnMessageReceivedCallback(IAsyncResult ar)
         {
-            Console.WriteLine("Message Callback");
+            //Console.WriteLine("Message Callback");
             OnMessageReceived.EndInvoke(ar);
         }
 
         private void OnRoomStateChangedCallback(IAsyncResult ar)
         {
-            Console.WriteLine("RoomState Callback");
+            //Console.WriteLine("RoomState Callback");
             OnRoomStateChanged.EndInvoke(ar);
         }
         #endregion
@@ -125,7 +127,7 @@ namespace AsyncTwitch
             }
 
             TwitchMessage message = new TwitchMessage();
-            string[] splitMsg = stringMsg.Split(':');
+            string[] splitMsg = stringMsg.Split(new string[]{" :"}, 3, StringSplitOptions.RemoveEmptyEntries); //a space colon is a better indicator of message sections.
             if(splitMsg.Length >= 3)
                 message.Content = splitMsg[2];
             message.RawMessage = stringMsg;
@@ -136,16 +138,16 @@ namespace AsyncTwitch
                 string[] splitTag = Tag.Split('=');
                 if (splitMsg.Length < 1) break;
                 if (splitTag.Length < 2) continue;
-                Console.WriteLine(splitTag[0] + "\n" + splitTag[1]);
+                //Console.WriteLine(splitTag[0] + "\n" + splitTag[1]);
                 switch (splitTag[0])
                 {
                     case "bits":
-                        Console.WriteLine("Found bits tag");
+                        //Console.WriteLine("Found bits tag");
                         message.GaveBits = true;
                         message.BitAmount = int.Parse(splitTag[1]);
                         break;
                     case "display-name":
-                        Console.WriteLine("Found display name");
+                        //Console.WriteLine("Found display name");
                         if (roomState.UserList.Exists(x => x.User.DisplayName == splitTag[1])) {
                             message.Author = roomState.UserList.Find(x => x.User.DisplayName == splitTag[1]).User;
                             break;
@@ -157,12 +159,15 @@ namespace AsyncTwitch
                         message.Author = author;
                         break;
                     case "emotes":
-                        Console.WriteLine("Found Emotes");
-                        MatchCollection emoteMatches = _emoteRX.Matches(stringMsg);
-                        message.Emotes = ParseEmotes(emoteMatches);
+                        //Console.WriteLine("Found Emotes");
+                        if (_emoteRX.IsMatch(stringMsg))
+                        {
+                            message.Emotes = ParseEmotes(splitTag[1]);
+                        }
+
                         break;
                     case "id":
-                        Console.WriteLine("Found ID");
+                        //Console.WriteLine("Found ID");
                         message.Id = splitTag[1];
                         break;
                     default:
@@ -173,7 +178,7 @@ namespace AsyncTwitch
             try
             {
                 OnMessageReceived?.BeginInvoke(this, message, OnMessageReceivedCallback, 0);
-                Console.WriteLine(message);
+                //Console.WriteLine(message);
             }
             catch (Exception e)
             {
@@ -263,11 +268,14 @@ namespace AsyncTwitch
                     case "subs-only":
                         roomState.SubOnly = int.Parse(TagParts[1]) > 0;
                         break;
+                    case "room-id":
+                        roomState.RoomID = TagParts[1];
+                        break;
                     default:
                         break;
                 }
             }
-            Console.WriteLine(roomState.ToString());
+            //Console.WriteLine(roomState.ToString());
         }
 
         //Called on UserMessaging to create the ChatUser object.
@@ -326,26 +334,27 @@ namespace AsyncTwitch
             return newUser;
         }
 
-        public TwitchEmote[] ParseEmotes(MatchCollection emoteCollection)
+        public TwitchEmote[] ParseEmotes(string emoteString)
         {
-            TwitchEmote[] emoteArray = new TwitchEmote[emoteCollection.Count];
-            foreach (Match match in emoteCollection)
+            emoteString.Remove(emoteString.Length - 1); //remove trailing semicolon.
+            string[] emoteSplit = emoteString.Split('/');
+            
+            TwitchEmote[] emoteArray = new TwitchEmote[emoteSplit.Length];
+            for (int i = 0; i < emoteSplit.Length; i ++)
             {
-                int iteration = 0;
-                TwitchEmote emote = new TwitchEmote();
-                emote.Id = match.Groups[0].Value;
-                emote.Index = new string[match.Groups.Count - 1][];
-                for (int i = 1; i < match.Groups.Count; i++)
+                TwitchEmote twitchEmote = new TwitchEmote();
+                string[] emoteData = emoteSplit[i].Split(':');
+                twitchEmote.Id = emoteData[0];
+                string[] emoteIndices = emoteData[1].Split(',');
+                twitchEmote.Index = new string[emoteIndices.Length][];
+
+                for (int j = 0; j < emoteIndices.Length; j++)
                 {
-                    string[] emoteIndices = match.Groups[i].Value.Split('-');
-                    emote.Index[i - 1][0] = emoteIndices[0];
-                    emote.Index[i - 1][1] = emoteIndices[1];
+                    twitchEmote.Index[j] = emoteIndices[j].Split('-');
                 }
 
-                emoteArray[iteration] = emote;
-                iteration++;
+                emoteArray[i] = twitchEmote;
             }
-
             return emoteArray;
         }
         #endregion

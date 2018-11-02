@@ -29,12 +29,15 @@ namespace AsyncTwitch
         public int SlowMode { get; set; }
         //is sub only mode on?
         public bool SubOnly { get; set; }
+        //The Id of the Channel
+        public string RoomID { get; set; }
 
         public List<ChatUserListing> UserList { get; private set; }
         private Timer _cleaningTimer; //We have to keep a refrence to the timer to avoid garbage collection.
 
         public RoomState()
         {
+            RoomID = "";
             BroadcasterLang = "";
             EmoteOnly = false;
             FollowersOnly = 0;

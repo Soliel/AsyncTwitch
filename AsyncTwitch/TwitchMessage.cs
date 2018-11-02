@@ -36,6 +36,12 @@ namespace AsyncTwitch
                                   "\n\tGave Bits: " + GaveBits + " How Many: " + BitAmount +
                                   "\n\tMessage ID: " + Id;
             returnString += "\n\nAuthor: " + Author.ToString();
+
+            foreach (TwitchEmote twitchEmote in Emotes)
+            {
+                returnString += "\n" + twitchEmote.ToString();
+            }
+
             return returnString;
         }
     }

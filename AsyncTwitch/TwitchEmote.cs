@@ -2,7 +2,7 @@
 
 namespace AsyncTwitch
 {
-    public struct TwitchEmote
+    public class TwitchEmote
     {
         //The full id of the emote.
         public string Id { get; set; }
@@ -22,6 +22,25 @@ namespace AsyncTwitch
         {
             Id = id;
             Index = index;
+        }
+
+        public TwitchEmote()
+        {
+            Id = "";
+            Index = new string[][]{new string[] {"", ""}};
+        }
+
+        public override string ToString()
+        {
+            string returnString = "Emote ID: " + Id;
+
+            foreach (string[] strings in Index)
+            {
+                if (strings.Length < 2) continue;
+                returnString += "\nIndex: " + strings[0] + " - " + strings[1];
+            }
+
+            return returnString;
         }
     }
 }
