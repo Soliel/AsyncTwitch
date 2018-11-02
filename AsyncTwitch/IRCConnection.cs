@@ -14,6 +14,7 @@ namespace AsyncTwitch
          */
         #region Private Vars
         private const int BUFFER_SIZE = 8192;
+        private const int RECONNECT_LIMIT = 20;
         private readonly byte[] EOF = new byte[] { 13, 10};
 
         private byte[] _buffer = new byte[BUFFER_SIZE];
@@ -22,6 +23,9 @@ namespace AsyncTwitch
 
         private readonly object _readLock = new object();
         private bool _reading = false;
+        private int _reconnectCount = 0;
+        private string _storedhost;
+        private ushort _storedport;
         #endregion
 
         public abstract void OnConnect();
@@ -37,7 +41,16 @@ namespace AsyncTwitch
         private void ConnectCallback(IAsyncResult ar)
         {
             _twitchSocket.EndConnect(ar);
-            if(!_twitchSocket.Connected) return;
+            if (!_twitchSocket.Connected)
+            {
+                if (_reconnectCount > RECONNECT_LIMIT)
+                {
+                    _reconnectCount = 0;
+                    return;
+                }
+                _reconnectCount++;
+                Connect(_storedhost, _storedport);
+            }
             _twitchSocket.BeginReceive(_buffer, 0, BUFFER_SIZE, SocketFlags.None, new AsyncCallback(Receive), null);
             OnConnect();
         }
@@ -50,7 +63,7 @@ namespace AsyncTwitch
                 byteLength = _twitchSocket.EndReceive(ar);
                 if (byteLength <= 0)
                 {
-                    //Disconnect
+                    Disconnect();
                     return;
                 }
             }
@@ -61,7 +74,8 @@ namespace AsyncTwitch
                 {
                     return;
                 }
-                //Disconnect here
+
+                Disconnect();
                 Console.WriteLine(e.ToString());
                 return;
             }
@@ -75,7 +89,7 @@ namespace AsyncTwitch
             }
             catch (Exception e)
             {
-                //Disconnect
+                Disconnect();
                 Console.WriteLine(e.ToString());
                 return;
             }
@@ -163,7 +177,7 @@ namespace AsyncTwitch
                     catch(Exception e)
                     {
                         Console.WriteLine(e.ToString());
-                        //disconnect
+                        Disconnect();
                         break;
                     }
                 }
@@ -180,7 +194,7 @@ namespace AsyncTwitch
                 catch(Exception e)
                 {
                     Console.WriteLine(e.ToString());
-                    //disconnect 
+                    Disconnect(); 
                     break;
                 }
 
@@ -198,10 +212,22 @@ namespace AsyncTwitch
                 catch(Exception e)
                 {
                     Console.WriteLine(e.ToString());
-                    //disconnect
+                    Disconnect();
                     break;
                 }
             }
+        }
+
+        public void Disconnect()
+        {
+            _twitchSocket.BeginDisconnect(true, DisconnectCallback, null);
+        }
+
+        public void DisconnectCallback(IAsyncResult ar)
+        {
+            _twitchSocket.EndDisconnect(ar);
+            _reconnectCount++;
+            Connect(_storedhost, _storedport);
         }
 
         //This is really fast for how simple it is.
