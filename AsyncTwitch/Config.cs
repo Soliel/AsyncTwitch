@@ -45,7 +45,21 @@ namespace AsyncTwitch
                 {
                     byte[] loadBytes = new byte[fs.Length];
                     fs.Read(loadBytes, 0, (int)fs.Length);
-                    return JsonUtility.FromJson<Config>(Encoding.ASCII.GetString(loadBytes));
+                    Config tempConfig = JsonUtility.FromJson<Config>(Encoding.ASCII.GetString(loadBytes));
+                    if (!tempConfig.OauthKey.StartsWith("oauth:"))
+                    {
+                        if (tempConfig.OauthKey.Contains(':'))
+                        {
+                            string[] oauthSplit = tempConfig.OauthKey.Split(':');
+                            tempConfig.OauthKey = "oauth:" + oauthSplit[1];
+                        }
+                        else
+                        {
+                            tempConfig.OauthKey = "oauth:" + tempConfig.OauthKey;
+                        }
+                    }
+
+                    return tempConfig;
                 }
             }
             else
