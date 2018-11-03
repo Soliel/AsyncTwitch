@@ -46,9 +46,7 @@ namespace AsyncTwitch
             SubOnly = false;
 
             UserList = new List<ChatUserListing>();
-            _cleaningTimer = null;
 
-            // ReSharper disable once AssignNullToNotNullAttribute
             _cleaningTimer = new Timer(RemoveInactiveUsers, UserList, TimeSpan.Zero, TimeSpan.FromMinutes(30));
         }
 

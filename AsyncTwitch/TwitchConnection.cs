@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using JetBrains.Annotations;
 using UnityEngine;
 
 /*
@@ -11,33 +13,26 @@ using UnityEngine;
 
 namespace AsyncTwitch
 {
-    public class TwitchConnection :  IrcConnection
+    [SuppressMessage("ReSharper", "PossibleNullReferenceException")]
+    public class TwitchConnection : IrcConnection
     {
+        public static TwitchConnection Instance;
+        private readonly Queue<string> _messageQueue = new Queue<string>();
+
+        //How long since the last message before we send another.
+        private readonly TimeSpan _rateLimit = new TimeSpan(0, 0, 0, 1, 500); 
+
+        private bool _isConnected;
+        private DateTime _lastMessageTime = DateTime.Now;
+        private Config _loginInfo;
+
+        public Encoding Utf8NoBom = new UTF8Encoding(false);
+        public RoomState RoomState = new RoomState();
         public static event Action<TwitchConnection, TwitchMessage> OnMessageReceived;
         public static event Action<TwitchConnection> OnConnected;
         public static event Action<TwitchConnection> OnChatJoined;
         public static event Action<TwitchConnection, ChatUser> OnChatParted;
         public static event Action<TwitchConnection, RoomState> OnRoomStateChanged;
-
-        public static TwitchConnection Instance;
-
-        public Encoding _utf8noBOM = new UTF8Encoding(false);
-        public RoomState roomState = new RoomState();
-
-        private readonly TimeSpan RateLimit = new TimeSpan(0, 0, 0, 1 ,500); //How long since the last message before we send another.
-        private Config _loginInfo;
-        private bool _isConnected;
-        private Queue<string> _messageQueue = new Queue<string>();
-        private DateTime _lastMessageTime = DateTime.Now;
-
-        #region REGEX Lines
-        private Regex _joinRX = new Regex(@"^:(?<User>[A-Za-z0-9]+)![A-Za-z0-9]+@[A-Za-z0-9]+\.tmi\.twitch\.tv\sJOIN\s", RegexOptions.Compiled);
-        private Regex _partRX = new Regex(@"^:(?<User>[A-Za-z0-9]+)![A-Za-z0-9]+@[A-Za-z0-9]+\.tmi\.twitch\.tv\sPART\s", RegexOptions.Compiled);
-        private Regex _badgeRX = new Regex(@"(?<=\@badges=|,)\w+\/\d+", RegexOptions.Compiled);
-        //private Regex _messageRX = new Regex(@"(?<=[A-Za-z0-9]+![A-Za-z0-9]+\@[A-Za-z0-9]+\.tmi\.twitch\.tv\sPRIVMSG\s#\w+\s:).+", RegexOptions.Compiled);
-        private Regex _emoteRX = new Regex(@"(?<=;emotes=)\d+:(\d+-\d+[,/;])+", RegexOptions.Compiled);
-        private Regex _roomStateRX = new Regex(@"@(?<Tags>.+)\s:tmi.twitch.tv ROOMSTATE #[A-Za-z0-9]+", RegexOptions.Compiled);
-        #endregion
 
         public static void OnLoad()
         {
@@ -45,11 +40,77 @@ namespace AsyncTwitch
             new GameObject("Twitch connection").AddComponent<TwitchConnection>();
         }
 
+        [UsedImplicitly]
         private void Awake()
         {
             Instance = this;
-            StartConnection(); //| Debug stuff
         }
+
+        [UsedImplicitly]
+        public void StartConnection()
+        {
+            if (_isConnected) return;
+
+            _loginInfo = Config.LoadFromJSON();
+            if (_loginInfo.Username == "") return;
+            Connect("irc.twitch.tv", 6667);
+            RoomState = new RoomState();
+            _isConnected = true;
+        }
+
+        public override void OnConnect()
+        {
+            SendRawMessage("CAP REQ :twitch.tv/membership twitch.tv/commands twitch.tv/tags");
+            SendRawMessage("PASS " + _loginInfo.OauthKey);
+            SendRawMessage("NICK " + _loginInfo.Username);
+            SendRawMessage("JOIN #" + _loginInfo.ChannelName);
+            OnConnected?.BeginInvoke(this, OnConnectedEventCallback, null);
+        }
+
+        //This is a simple Queueing system to avoid the ratelimit.
+        //We can expand upon this later by finding how many messages we've sent in the last 30 seconds.
+        [UsedImplicitly]
+        public void SendChatMessage(string msg)
+        {
+            if (DateTime.Now - _lastMessageTime >= _rateLimit) Send("PRIVMSG #" + _loginInfo.ChannelName + " :" + msg);
+            _messageQueue.Enqueue("PRIVMSG #" + _loginInfo.ChannelName + " :" + msg);
+            DateTime timeUntilRateLimit = _lastMessageTime.Add(_rateLimit);
+            Task.Delay(timeUntilRateLimit - DateTime.Now).ContinueWith(SendMessageFromQueue);
+            _lastMessageTime = timeUntilRateLimit;
+        }
+
+        public void SendRawMessage(string msg)
+        {
+            if (DateTime.Now - _lastMessageTime >= _rateLimit) Send(msg);
+            _messageQueue.Enqueue(msg);
+            DateTime timeUntilRateLimit = _lastMessageTime.Add(_rateLimit);
+            Task.Delay(timeUntilRateLimit - DateTime.Now).ContinueWith(SendMessageFromQueue);
+            _lastMessageTime = timeUntilRateLimit;
+        }
+
+        //The Send method appends CR LF to the end of every message so we don't have to worry.
+        private void SendMessageFromQueue(Task task)
+        {
+            Send(_messageQueue.Dequeue());
+        }
+
+        #region REGEX Lines
+
+        private readonly Regex _joinRX =
+            new Regex(@"^:(?<User>[A-Za-z0-9]+)![A-Za-z0-9]+@[A-Za-z0-9]+\.tmi\.twitch\.tv\sJOIN\s",
+                RegexOptions.Compiled);
+
+        private readonly Regex _partRX =
+            new Regex(@"^:(?<User>[A-Za-z0-9]+)![A-Za-z0-9]+@[A-Za-z0-9]+\.tmi\.twitch\.tv\sPART\s",
+                RegexOptions.Compiled);
+
+        private readonly Regex _badgeRX = new Regex(@"(?<=\@badges=|,)\w+\/\d+", RegexOptions.Compiled);
+        private readonly Regex _emoteRX = new Regex(@"(?<=;emotes=)\d+:(\d+-\d+[,/;])+", RegexOptions.Compiled);
+
+        private readonly Regex _roomStateRX =
+            new Regex(@"@(?<Tags>.+)\s:tmi.twitch.tv ROOMSTATE #[A-Za-z0-9]+", RegexOptions.Compiled);
+
+        #endregion
 
         #region EventCallbacks
 
@@ -82,37 +143,18 @@ namespace AsyncTwitch
             //Console.WriteLine("RoomState Callback");
             OnRoomStateChanged.EndInvoke(ar);
         }
+
         #endregion
 
-        public void StartConnection()
-        {
-            if (_isConnected) return;
-
-            _loginInfo = Config.LoadFromJSON();
-            if (_loginInfo.Username == "") return;
-            Connect("irc.twitch.tv", 6667);
-            roomState = new RoomState();
-            _isConnected = true;
-        }
-
-        public override void OnConnect()
-        {
-            SendRawMessage("CAP REQ :twitch.tv/membership twitch.tv/commands twitch.tv/tags");
-            SendRawMessage("PASS " + _loginInfo.OauthKey);
-            SendRawMessage("NICK " + _loginInfo.Username);
-            SendRawMessage("JOIN #" + _loginInfo.ChannelName);
-            OnConnected?.BeginInvoke(this, OnConnectedEventCallback, null);
-        }
-
         #region MessageParsing
+
         public override void ProcessMessage(byte[] msg)
         {
-            string stringMsg = _utf8noBOM.GetString(msg);
-            //Console.WriteLine(stringMsg);
+            string stringMsg = Utf8NoBom.GetString(msg);
             if (FilterJoinPart(stringMsg)) return;
+
             if (_roomStateRX.IsMatch(stringMsg))
             {
-
                 try
                 {
                     FilterRoomState(stringMsg);
@@ -122,116 +164,55 @@ namespace AsyncTwitch
                     Console.WriteLine(e);
                 }
 
-                OnRoomStateChanged?.BeginInvoke(this, roomState, OnRoomStateChangedCallback, null);
+                OnRoomStateChanged?.BeginInvoke(this, RoomState, OnRoomStateChangedCallback, null);
                 return;
             }
 
             TwitchMessage message = new TwitchMessage();
-            string[] splitMsg = stringMsg.Split(new string[]{" :"}, 3, StringSplitOptions.RemoveEmptyEntries); //a space colon is a better indicator of message sections.
-            if(splitMsg.Length >= 3)
+            string[] splitMsg = stringMsg.Split(new[] {" :"}, 3, StringSplitOptions.RemoveEmptyEntries); 
+            if (splitMsg.Length >= 3)
                 message.Content = splitMsg[2];
             message.RawMessage = stringMsg;
             splitMsg = splitMsg[0].Split(';');
 
-            foreach (string Tag in splitMsg)
+            foreach (string msgTag in splitMsg)
             {
-                string[] splitTag = Tag.Split('=');
+                string[] splitTag = msgTag.Split('=');
                 if (splitMsg.Length < 1) break;
                 if (splitTag.Length < 2) continue;
-                //Console.WriteLine(splitTag[0] + "\n" + splitTag[1]);
                 switch (splitTag[0])
                 {
                     case "bits":
-                        //Console.WriteLine("Found bits tag");
                         message.GaveBits = true;
                         message.BitAmount = int.Parse(splitTag[1]);
                         break;
                     case "display-name":
-                        //Console.WriteLine("Found display name");
-                        if (roomState.UserList.Exists(x => x.User.DisplayName == splitTag[1])) {
-                            message.Author = roomState.UserList.Find(x => x.User.DisplayName == splitTag[1]).User;
-                            break;
-                        }
-
-                        ChatUser author = CreateChatUser(stringMsg);
-                        if(stringMsg.Contains(":tmi.twitch.tv PRIVMSG"))
-                            roomState.AddUserToList(author);
-                        message.Author = author;
+                        message.Author = FindChatUser(splitTag[1], stringMsg);
                         break;
                     case "emotes":
-                        //Console.WriteLine("Found Emotes");
-                        if (_emoteRX.IsMatch(stringMsg))
-                        {
-                            message.Emotes = ParseEmotes(splitTag[1]);
-                        }
-
+                        if (_emoteRX.IsMatch(stringMsg)) message.Emotes = ParseEmotes(splitTag[1]);
                         break;
                     case "id":
-                        //Console.WriteLine("Found ID");
                         message.Id = splitTag[1];
-                        break;
-                    default:
                         break;
                 }
             }
 
-            try
-            {
-                OnMessageReceived?.BeginInvoke(this, message, OnMessageReceivedCallback, 0);
-                //Console.WriteLine(message);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e);
-            }
-            
-            
+            OnMessageReceived?.BeginInvoke(this, message, OnMessageReceivedCallback, 0);
         }
 
         //These events don't work very well due to caching and they don't have much data to begin with. don't use them.
         private bool FilterJoinPart(string msg)
         {
-            try
+            if (_joinRX.IsMatch(msg)) OnChatJoined?.BeginInvoke(this, OnJoinEventCallback, msg);
+
+            if (_partRX.IsMatch(msg))
             {
-                /*
-                 Left in for development purposes no flame.
-                 if (_joinRX.IsMatch(msg))
-                {
-                    ChatUser joinedUser;
-                    string username = _joinRX.Match(msg).Groups["User"].Value;
-                    if (roomState.UserList.Exists(x => x.User.DisplayName == username))
-                    {
-                        joinedUser = roomState.UserList.Find(x => x.User.DisplayName == username).User;
-                        roomState.UserList.Find(x => x.User.DisplayName == username).UpdateTime();
-                    }
-                    else
-                    {
-                        joinedUser = CreateChatUser(msg);
-                        roomState.AddUserToList(joinedUser);
-                    }
-
-                    Turns out on Join doesn't return enough info for a user object.
-                    OnChatJoined?.BeginInvoke(this, joinedUser, OnJoinEventCallback, null);
-                    return true;
-                }*/
-
-                if (_joinRX.IsMatch(msg))
-                {
-                    OnChatJoined?.BeginInvoke(this, OnJoinEventCallback, msg);
-                }
-
-                if (_partRX.IsMatch(msg))
-                {
-                    string username = _partRX.Match(msg).Groups["User"].Value;
-                    ChatUser partedUser = roomState.UserList.Find(x => x.User.DisplayName == username).User;
-                    roomState.RemoveUserFromList(username);
-                    OnChatParted?.BeginInvoke(this, partedUser, OnPartEvenCallback, msg);
-                    return true;
-                }
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e.ToString());
+                string username = _partRX.Match(msg).Groups["User"].Value;
+                ChatUser partedUser = RoomState.UserList.Find(x => x.User.DisplayName == username).User;
+                RoomState.RemoveUserFromList(username);
+                OnChatParted?.BeginInvoke(this, partedUser, OnPartEvenCallback, msg);
+                return true;
             }
 
             return false;
@@ -239,43 +220,52 @@ namespace AsyncTwitch
 
         private void FilterRoomState(string msg)
         {
-            string Tags = _roomStateRX.Match(msg).Groups["Tags"].Value;
-            string[] TagArray = Tags.Split(';');
-            foreach(string Tag in TagArray)
+            string tags = _roomStateRX.Match(msg).Groups["Tags"].Value;
+            string[] tagArray = tags.Split(';');
+            foreach (string msgTag in tagArray)
             {
-                string[] TagParts = Tag.Split('=');
+                string[] tagParts = msgTag.Split('=');
 
-                if (TagParts.Length < 2)
+                if (tagParts.Length < 2)
                     continue;
 
-                switch(TagParts[0])
+                switch (tagParts[0])
                 {
                     case "broadcaster-lang":
-                        roomState.BroadcasterLang = TagParts[1];
+                        RoomState.BroadcasterLang = tagParts[1];
                         break;
                     case "emote-only":
-                        roomState.EmoteOnly = int.Parse(TagParts[1]) > 0;
+                        RoomState.EmoteOnly = int.Parse(tagParts[1]) > 0;
                         break;
                     case "followers-only":
-                        roomState.FollowersOnly = int.Parse(TagParts[1]);
+                        RoomState.FollowersOnly = int.Parse(tagParts[1]);
                         break;
                     case "r9k":
-                        roomState.R9KMode = int.Parse(TagParts[1]) > 0;
+                        RoomState.R9KMode = int.Parse(tagParts[1]) > 0;
                         break;
                     case "slow":
-                        roomState.SlowMode = int.Parse(TagParts[1]);
+                        RoomState.SlowMode = int.Parse(tagParts[1]);
                         break;
                     case "subs-only":
-                        roomState.SubOnly = int.Parse(TagParts[1]) > 0;
+                        RoomState.SubOnly = int.Parse(tagParts[1]) > 0;
                         break;
                     case "room-id":
-                        roomState.RoomID = TagParts[1];
-                        break;
-                    default:
+                        RoomState.RoomID = tagParts[1];
                         break;
                 }
             }
-            //Console.WriteLine(roomState.ToString());
+        }
+
+        public ChatUser FindChatUser(string displayName, string rawMessage)
+        {
+            if (RoomState.UserList.Exists(x => x.User.DisplayName == displayName))
+            {
+                return RoomState.UserList.Find(x => x.User.DisplayName == displayName).User;
+            }
+
+            ChatUser author = CreateChatUser(rawMessage);
+            if (rawMessage.Contains(":tmi.twitch.tv PRIVMSG")) RoomState.AddUserToList(author);
+            return author;
         }
 
         //Called on UserMessaging to create the ChatUser object.
@@ -292,15 +282,9 @@ namespace AsyncTwitch
                 Badge badge = new Badge(badgeInfo[0], int.Parse(badgeInfo[1]));
                 newUser.Badges[i] = badge;
 
-                if (badgeInfo[0] == "broadcaster")
-                {
-                    newUser.IsBroadcaster = true;
-                }
+                if (badgeInfo[0] == "broadcaster") newUser.IsBroadcaster = true;
 
-                if (badgeInfo[0] == "subscriber")
-                {
-                    newUser.IsSubscriber = true;
-                }
+                if (badgeInfo[0] == "subscriber") newUser.IsSubscriber = true;
 
                 i++;
             }
@@ -308,25 +292,23 @@ namespace AsyncTwitch
             string[] tagFilteredString = chatJoin.Split(':');
             tagFilteredString = tagFilteredString[0].Split(';');
 
-            foreach (string Tag in tagFilteredString)
+            foreach (string msgTag in tagFilteredString)
             {
-                string[] TagParts = Tag.Split('=');
+                string[] tagParts = msgTag.Split('=');
 
-                if (TagParts.Length < 2)
+                if (tagParts.Length < 2)
                     continue;
 
-                switch (TagParts[0])
+                switch (tagParts[0])
                 {
                     case "color":
-                        newUser.Color = TagParts[1];
+                        newUser.Color = tagParts[1];
                         break;
                     case "display-name":
-                        newUser.DisplayName = TagParts[1];
+                        newUser.DisplayName = tagParts[1];
                         break;
                     case "mod":
-                        newUser.IsMod = int.Parse(TagParts[1]) > 0;
-                        break;
-                    default:
+                        newUser.IsMod = int.Parse(tagParts[1]) > 0;
                         break;
                 }
             }
@@ -338,9 +320,9 @@ namespace AsyncTwitch
         {
             emoteString.Remove(emoteString.Length - 1); //remove trailing semicolon.
             string[] emoteSplit = emoteString.Split('/');
-            
+
             TwitchEmote[] emoteArray = new TwitchEmote[emoteSplit.Length];
-            for (int i = 0; i < emoteSplit.Length; i ++)
+            for (int i = 0; i < emoteSplit.Length; i++)
             {
                 TwitchEmote twitchEmote = new TwitchEmote();
                 string[] emoteData = emoteSplit[i].Split(':');
@@ -355,40 +337,10 @@ namespace AsyncTwitch
 
                 emoteArray[i] = twitchEmote;
             }
+
             return emoteArray;
         }
+
         #endregion
-
-        //This is a simple Queueing system to avoid the ratelimit.
-        //We can expand upon this later by finding how many messages we've sent in the last 30 seconds.
-        public void SendChatMessage(string msg)
-        {
-            if (DateTime.Now - _lastMessageTime >= RateLimit)
-            {
-                Send("PRIVMSG #" + _loginInfo.ChannelName + " :" + msg);
-            }
-            _messageQueue.Enqueue("PRIVMSG #"+ _loginInfo.ChannelName + " :" + msg);
-            DateTime timeUntilRateLimit = _lastMessageTime.Add(RateLimit);
-            Task.Delay(timeUntilRateLimit - DateTime.Now).ContinueWith(SendMessageFromQueue);
-            _lastMessageTime = timeUntilRateLimit;
-        }
-
-        public void SendRawMessage(string msg)
-        {
-            if (DateTime.Now - _lastMessageTime >= RateLimit)
-            {
-                Send(msg);
-            }
-            _messageQueue.Enqueue(msg);
-            DateTime timeUntilRateLimit = _lastMessageTime.Add(RateLimit);
-            Task.Delay(timeUntilRateLimit - DateTime.Now).ContinueWith(SendMessageFromQueue);
-            _lastMessageTime = timeUntilRateLimit;
-        }
-
-        //The Send method appends CR LF to the end of every message so we don't have to worry.
-        private void SendMessageFromQueue(Task task)
-        {
-            Send(_messageQueue.Dequeue());
-        }
     }
 }
