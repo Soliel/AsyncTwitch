@@ -151,6 +151,12 @@ namespace AsyncTwitch
         public override void ProcessMessage(byte[] msg)
         {
             string stringMsg = Utf8NoBom.GetString(msg);
+
+            if (stringMsg == "PING :tmi.twitch.tv")
+            {
+                SendRawMessage("PONG :tmi.twitch.tv");
+            }
+
             if (FilterJoinPart(stringMsg)) return;
 
             if (_roomStateRX.IsMatch(stringMsg))
