@@ -1,4 +1,5 @@
 ﻿using IllusionPlugin;
+using UnityEngine.SceneManagement;
 
 namespace AsyncTwitch
 {
@@ -14,6 +15,7 @@ namespace AsyncTwitch
 
         public void OnApplicationStart()
         {
+            TwitchConnection.OnLoad();
         }
 
         public void OnFixedUpdate()
@@ -22,7 +24,7 @@ namespace AsyncTwitch
 
         public void OnLevelWasInitialized(int level)
         {
-            if (level != 0) return;
+            if(SceneManager.GetActiveScene().name != "Menu") return;
             TwitchConnection.OnLoad();
         }
 

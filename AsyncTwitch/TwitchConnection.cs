@@ -28,12 +28,15 @@ namespace AsyncTwitch
         private Config _loginInfo;
 
         public Encoding Utf8NoBom = new UTF8Encoding(false);
-        public RoomState RoomState = new RoomState();
+        //public RoomState RoomState = new RoomState();
+        public Dictionary<string, RoomState> RoomStates = new Dictionary<string, RoomState>();
+
         public static event Action<TwitchConnection, TwitchMessage> OnMessageReceived;
         public static event Action<TwitchConnection> OnConnected;
         public static event Action<TwitchConnection> OnChatJoined;
         public static event Action<TwitchConnection, ChatUser> OnChatParted;
         public static event Action<TwitchConnection, RoomState> OnRoomStateChanged;
+        public static event Action<string> OnRawMessageReceived;
 
         public static void OnLoad()
         {
@@ -45,6 +48,7 @@ namespace AsyncTwitch
         private void Awake()
         {
             Instance = this;
+            DontDestroyOnLoad(this);
         }
 
         [UsedImplicitly]
@@ -55,7 +59,6 @@ namespace AsyncTwitch
             _loginInfo = Config.LoadFromJSON();
             if (_loginInfo.Username == "") return;
             Connect("irc.twitch.tv", 6667);
-            RoomState = new RoomState();
             _isConnected = true;
         }
 
@@ -64,7 +67,7 @@ namespace AsyncTwitch
             SendRawMessage("CAP REQ :twitch.tv/membership twitch.tv/commands twitch.tv/tags");
             SendRawMessage("PASS " + _loginInfo.OauthKey);
             SendRawMessage("NICK " + _loginInfo.Username);
-            SendRawMessage("JOIN #" + _loginInfo.ChannelName);
+            JoinRoom(_loginInfo.ChannelName);
             OnConnected?.BeginInvoke(this, OnConnectedEventCallback, null);
         }
 
@@ -95,6 +98,14 @@ namespace AsyncTwitch
             Send(_messageQueue.Dequeue());
         }
 
+        [UsedImplicitly]
+        public void JoinRoom(string channel)
+        {
+            RoomState newRoomState = new RoomState();
+            RoomStates[channel] = newRoomState;
+            SendRawMessage("JOIN #" + channel);
+        }
+
         #region REGEX Lines
 
         private readonly Regex _joinRX =
@@ -110,6 +121,7 @@ namespace AsyncTwitch
 
         private readonly Regex _roomStateRX =
             new Regex(@"@(?<Tags>.+)\s:tmi.twitch.tv ROOMSTATE #[A-Za-z0-9]+", RegexOptions.Compiled);
+        private readonly Regex _channelName = new Regex(@":tmi.twitch.tv\s(?<Command>\w+)\s#(?<Channel>[A-Za-z0-9]+)\s:", RegexOptions.Compiled);
 
         #endregion
 
@@ -145,6 +157,11 @@ namespace AsyncTwitch
             OnRoomStateChanged.EndInvoke(ar);
         }
 
+        private void OnRawMessageReceivedCallback(IAsyncResult ar)
+        {
+            OnRawMessageReceived.EndInvoke(ar);
+        }
+
         #endregion
 
         #region MessageParsing
@@ -152,26 +169,29 @@ namespace AsyncTwitch
         public override void ProcessMessage(byte[] msg)
         {
             string stringMsg = Utf8NoBom.GetString(msg);
+            OnRawMessageReceived.BeginInvoke(stringMsg, OnRawMessageReceivedCallback, null);
 
             if (stringMsg == "PING :tmi.twitch.tv")
             {
                 Send("PONG :tmi.twitch.tv");
             }
 
-            if (FilterJoinPart(stringMsg)) return;
+            string channel = _channelName.Match(stringMsg).Groups["Channel"].Value;
+
+            if (FilterJoinPart(stringMsg, channel)) return;
 
             if (_roomStateRX.IsMatch(stringMsg))
             {
                 try
                 {
-                    FilterRoomState(stringMsg);
+                    FilterRoomState(stringMsg, channel);
                 }
                 catch (Exception e)
                 {
                     Console.WriteLine(e);
                 }
 
-                OnRoomStateChanged?.BeginInvoke(this, RoomState, OnRoomStateChangedCallback, null);
+                OnRoomStateChanged?.BeginInvoke(this, RoomStates[channel], OnRoomStateChangedCallback, null);
                 return;
             }
 
@@ -194,7 +214,7 @@ namespace AsyncTwitch
                         message.BitAmount = int.Parse(splitTag[1]);
                         break;
                     case "display-name":
-                        message.Author = FindChatUser(splitTag[1], stringMsg);
+                        message.Author = FindChatUser(splitTag[1], stringMsg, channel);
                         break;
                     case "emotes":
                         if (_emoteRX.IsMatch(stringMsg)) message.Emotes = ParseEmotes(splitTag[1]);
@@ -205,21 +225,22 @@ namespace AsyncTwitch
                 }
             }
 
+            message.Room = RoomStates[channel];
             OnMessageReceived?.BeginInvoke(this, message, OnMessageReceivedCallback, 0);
         }
 
         //These events don't work very well due to caching and they don't have much data to begin with. don't use them.
-        private bool FilterJoinPart(string msg)
+        private bool FilterJoinPart(string msg, string channel)
         {
             if (_joinRX.IsMatch(msg)) OnChatJoined?.BeginInvoke(this, OnJoinEventCallback, msg);
 
             if (_partRX.IsMatch(msg))
             {
                 string username = _partRX.Match(msg).Groups["User"].Value;
-                ChatUserListing partedUser = RoomState.UserList.FirstOrDefault(x => x.User.DisplayName == username);
+                ChatUserListing partedUser = RoomStates[channel].UserList.FirstOrDefault(x => x.User.DisplayName == username);
                 if (partedUser.User != null)
                 {
-                    RoomState.RemoveUserFromList(username);
+                    RoomStates[channel].RemoveUserFromList(username);
                     OnChatParted?.BeginInvoke(this, partedUser.User, OnPartEvenCallback, msg);
                 }
 
@@ -229,7 +250,7 @@ namespace AsyncTwitch
             return false;
         }
 
-        private void FilterRoomState(string msg)
+        private void FilterRoomState(string msg, string channel)
         {
             string tags = _roomStateRX.Match(msg).Groups["Tags"].Value;
             string[] tagArray = tags.Split(';');
@@ -243,39 +264,39 @@ namespace AsyncTwitch
                 switch (tagParts[0])
                 {
                     case "broadcaster-lang":
-                        RoomState.BroadcasterLang = tagParts[1];
+                        RoomStates[channel].BroadcasterLang = tagParts[1];
                         break;
                     case "emote-only":
-                        RoomState.EmoteOnly = int.Parse(tagParts[1]) > 0;
+                        RoomStates[channel].EmoteOnly = int.Parse(tagParts[1]) > 0;
                         break;
                     case "followers-only":
-                        RoomState.FollowersOnly = int.Parse(tagParts[1]);
+                        RoomStates[channel].FollowersOnly = int.Parse(tagParts[1]);
                         break;
                     case "r9k":
-                        RoomState.R9KMode = int.Parse(tagParts[1]) > 0;
+                        RoomStates[channel].R9KMode = int.Parse(tagParts[1]) > 0;
                         break;
                     case "slow":
-                        RoomState.SlowMode = int.Parse(tagParts[1]);
+                        RoomStates[channel].SlowMode = int.Parse(tagParts[1]);
                         break;
                     case "subs-only":
-                        RoomState.SubOnly = int.Parse(tagParts[1]) > 0;
+                        RoomStates[channel].SubOnly = int.Parse(tagParts[1]) > 0;
                         break;
                     case "room-id":
-                        RoomState.RoomID = tagParts[1];
+                        RoomStates[channel].RoomID = tagParts[1];
                         break;
                 }
             }
         }
 
-        public ChatUser FindChatUser(string displayName, string rawMessage)
+        public ChatUser FindChatUser(string displayName, string rawMessage, string channel)
         {
-            if (RoomState.UserList.Exists(x => x.User.DisplayName == displayName))
+            if (RoomStates[channel].UserList.Exists(x => x.User.DisplayName == displayName))
             {
-                return RoomState.UserList.Find(x => x.User.DisplayName == displayName).User;
+                return RoomStates[channel].UserList.Find(x => x.User.DisplayName == displayName).User;
             }
 
             ChatUser author = CreateChatUser(rawMessage);
-            if (rawMessage.Contains(":tmi.twitch.tv PRIVMSG")) RoomState.AddUserToList(author);
+            if (rawMessage.Contains(":tmi.twitch.tv PRIVMSG")) RoomStates[channel].AddUserToList(author);
             return author;
         }
 
