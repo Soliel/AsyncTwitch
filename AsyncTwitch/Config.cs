@@ -30,7 +30,7 @@ namespace AsyncTwitch
 
         public void SaveJSON()
         {
-            using(FileStream fs = new FileStream("Config/AsyncTwitchConfig.json", FileMode.Create, FileAccess.Write))
+            using(FileStream fs = new FileStream("UserData/AsyncTwitchConfig.json", FileMode.Create, FileAccess.Write))
             {
                 byte[] Buffer = Encoding.ASCII.GetBytes(JsonUtility.ToJson(this, true));
                 fs.Write(Buffer, 0, Buffer.Length);
@@ -39,9 +39,9 @@ namespace AsyncTwitch
 
         public static Config LoadFromJSON()
         {
-            if (File.Exists("Config/AsyncTwitchConfig.json"))
+            if (File.Exists("UserData/AsyncTwitchConfig.json"))
             {
-                using (FileStream fs = new FileStream("Config/AsyncTwitchConfig.json", FileMode.Open, FileAccess.Read))
+                using (FileStream fs = new FileStream("UserData/AsyncTwitchConfig.json", FileMode.Open, FileAccess.Read))
                 {
                     byte[] loadBytes = new byte[fs.Length];
                     fs.Read(loadBytes, 0, (int)fs.Length);

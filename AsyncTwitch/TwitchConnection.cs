@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -154,7 +155,7 @@ namespace AsyncTwitch
 
             if (stringMsg == "PING :tmi.twitch.tv")
             {
-                SendRawMessage("PONG :tmi.twitch.tv");
+                Send("PONG :tmi.twitch.tv");
             }
 
             if (FilterJoinPart(stringMsg)) return;
@@ -215,9 +216,13 @@ namespace AsyncTwitch
             if (_partRX.IsMatch(msg))
             {
                 string username = _partRX.Match(msg).Groups["User"].Value;
-                ChatUser partedUser = RoomState.UserList.Find(x => x.User.DisplayName == username).User;
-                RoomState.RemoveUserFromList(username);
-                OnChatParted?.BeginInvoke(this, partedUser, OnPartEvenCallback, msg);
+                ChatUserListing partedUser = RoomState.UserList.FirstOrDefault(x => x.User.DisplayName == username);
+                if (partedUser.User != null)
+                {
+                    RoomState.RemoveUserFromList(username);
+                    OnChatParted?.BeginInvoke(this, partedUser.User, OnPartEvenCallback, msg);
+                }
+
                 return true;
             }
 
