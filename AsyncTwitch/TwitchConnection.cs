@@ -176,7 +176,9 @@ namespace AsyncTwitch
                 Send("PONG :tmi.twitch.tv");
             }
 
-            string channel = _channelName.Match(stringMsg).Groups["Channel"].Value;
+            string channel = "";
+            if (_channelName.IsMatch(stringMsg))
+                channel = _channelName.Match(stringMsg).Groups["Channel"].Value;
 
             if (FilterJoinPart(stringMsg, channel)) return;
 
