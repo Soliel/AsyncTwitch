@@ -21,7 +21,7 @@ namespace AsyncTwitch
         private readonly Queue<string> _messageQueue = new Queue<string>();
 
         //How long since the last message before we send another.
-        private readonly TimeSpan _rateLimit = new TimeSpan(0, 0, 0, 1, 500); 
+        private readonly TimeSpan _rateLimit = new TimeSpan(0, 0, 0, 1, 500);
 
         private bool _isConnected;
         private DateTime _lastMessageTime = DateTime.Now;
@@ -55,7 +55,7 @@ namespace AsyncTwitch
         public void StartConnection()
         {
             if (_isConnected) return;
-
+            
             _loginInfo = Config.LoadFromJSON();
             if (_loginInfo.Username == "") return;
             Connect("irc.twitch.tv", 6667);
@@ -101,6 +101,8 @@ namespace AsyncTwitch
         [UsedImplicitly]
         public void JoinRoom(string channel)
         {
+            if (RoomStates.ContainsKey(channel)) return;
+
             RoomState newRoomState = new RoomState();
             RoomStates[channel] = newRoomState;
             SendRawMessage("JOIN #" + channel);
@@ -169,7 +171,7 @@ namespace AsyncTwitch
         public override void ProcessMessage(byte[] msg)
         {
             string stringMsg = Utf8NoBom.GetString(msg);
-            OnRawMessageReceived.BeginInvoke(stringMsg, OnRawMessageReceivedCallback, null);
+            OnRawMessageReceived?.BeginInvoke(stringMsg, OnRawMessageReceivedCallback, null);
 
             if (stringMsg == "PING :tmi.twitch.tv")
             {
@@ -204,30 +206,33 @@ namespace AsyncTwitch
             message.RawMessage = stringMsg;
             splitMsg = splitMsg[0].Split(';');
 
-            foreach (string msgTag in splitMsg)
+            if (RoomStates.ContainsKey(channel))
             {
-                string[] splitTag = msgTag.Split('=');
-                if (splitMsg.Length < 1) break;
-                if (splitTag.Length < 2) continue;
-                switch (splitTag[0])
+                foreach (string msgTag in splitMsg)
                 {
-                    case "bits":
-                        message.GaveBits = true;
-                        message.BitAmount = int.Parse(splitTag[1]);
-                        break;
-                    case "display-name":
-                        message.Author = FindChatUser(splitTag[1], stringMsg, channel);
-                        break;
-                    case "emotes":
-                        if (_emoteRX.IsMatch(stringMsg)) message.Emotes = ParseEmotes(splitTag[1]);
-                        break;
-                    case "id":
-                        message.Id = splitTag[1];
-                        break;
+                    string[] splitTag = msgTag.Split('=');
+                    if (splitMsg.Length < 1) break;
+                    if (splitTag.Length < 2) continue;
+                    switch (splitTag[0])
+                    {
+                        case "bits":
+                            message.GaveBits = true;
+                            message.BitAmount = int.Parse(splitTag[1]);
+                            break;
+                        case "display-name":
+                            message.Author = FindChatUser(splitTag[1], stringMsg, channel);
+                            break;
+                        case "emotes":
+                            if (_emoteRX.IsMatch(stringMsg)) message.Emotes = ParseEmotes(splitTag[1]);
+                            break;
+                        case "id":
+                            message.Id = splitTag[1];
+                            break;
+                    }
                 }
+                message.Room = RoomStates[channel];
             }
 
-            message.Room = RoomStates[channel];
             OnMessageReceived?.BeginInvoke(this, message, OnMessageReceivedCallback, 0);
         }
 
