@@ -123,7 +123,7 @@ namespace AsyncTwitch
 
         private readonly Regex _roomStateRX =
             new Regex(@"@(?<Tags>.+)\s:tmi.twitch.tv ROOMSTATE #[A-Za-z0-9]+", RegexOptions.Compiled);
-        private readonly Regex _channelName = new Regex(@":tmi.twitch.tv\s(?<Command>\w+)\s#(?<Channel>[A-Za-z0-9]+)\s:", RegexOptions.Compiled);
+        private readonly Regex _channelName = new Regex(@":tmi.twitch.tv\s(?<Command>\w+)\s#(?<Channel>[A-Za-z0-9]+)", RegexOptions.Compiled);
 
         #endregion
 
