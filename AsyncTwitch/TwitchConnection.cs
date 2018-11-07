@@ -14,6 +14,86 @@ using UnityEngine;
 
 namespace AsyncTwitch
 {
+    public class RegisteredPlugin
+    {
+        public event Action<TwitchConnection, TwitchMessage> OnMessageReceived = null;
+        public event Action<TwitchConnection> OnConnected = null;
+        public event Action<TwitchConnection> OnChatJoined = null;
+        public event Action<TwitchConnection, ChatUser> OnChatParted = null;
+        public event Action<TwitchConnection, RoomState> OnRoomStateChanged = null;
+        public event Action<string> OnRawMessageReceived = null;
+
+        public void TryInvokeOnConnected(TwitchConnection obj)
+        {
+            OnConnected?.BeginInvoke(obj, OnConnectedEventCallback, null);
+        }
+
+        public void TryInvokeOnRawMessageReceived(string stringMsg)
+        {
+            OnRawMessageReceived?.BeginInvoke(stringMsg, OnRawMessageReceivedCallback, null);
+        }
+
+        public void TryInvokeOnRoomStateChanged(TwitchConnection obj, RoomState roomstate)
+        {
+            OnRoomStateChanged?.BeginInvoke(obj, roomstate, OnRoomStateChangedCallback, null);
+        }
+
+        public void TryInvokeOnMessageReceived(TwitchConnection obj, TwitchMessage msg)
+        {
+            OnMessageReceived?.BeginInvoke(obj, msg, OnMessageReceivedCallback, null);
+        }
+
+        public void TryInvokeOnChatJoined(TwitchConnection obj, string msg)
+        {
+            OnChatJoined?.BeginInvoke(obj, OnJoinEventCallback, msg);
+        }
+
+        public void TryInvokeOnChatParted(TwitchConnection obj, ChatUserListing user, string msg)
+        {
+            OnChatParted?.BeginInvoke(obj, user.User, OnPartEvenCallback, msg);
+        }
+
+        #region EventCallbacks
+
+        private void OnConnectedEventCallback(IAsyncResult ar)
+        {
+            //Console.WriteLine("Connected Callback");
+            OnConnected.EndInvoke(ar);
+        }
+
+        private void OnJoinEventCallback(IAsyncResult ar)
+        {
+            //Console.WriteLine("Join Callback");
+            OnChatJoined.EndInvoke(ar);
+        }
+
+        private void OnPartEvenCallback(IAsyncResult ar)
+        {
+            //Console.WriteLine("Part Callback");
+            OnChatParted.EndInvoke(ar);
+        }
+
+        private void OnMessageReceivedCallback(IAsyncResult ar)
+        {
+            //Console.WriteLine("Message Callback");
+            OnMessageReceived.EndInvoke(ar);
+        }
+
+        private void OnRoomStateChangedCallback(IAsyncResult ar)
+        {
+            //Console.WriteLine("RoomState Callback");
+            OnRoomStateChanged.EndInvoke(ar);
+        }
+
+        private void OnRawMessageReceivedCallback(IAsyncResult ar)
+        {
+            OnRawMessageReceived.EndInvoke(ar);
+        }
+
+        #endregion
+    }
+
+
     [SuppressMessage("ReSharper", "PossibleNullReferenceException")]
     public class TwitchConnection : IrcConnection
     {
@@ -30,13 +110,9 @@ namespace AsyncTwitch
         public Encoding Utf8NoBom = new UTF8Encoding(false);
         //public RoomState RoomState = new RoomState();
         public Dictionary<string, RoomState> RoomStates = new Dictionary<string, RoomState>();
+        public Dictionary<string, RegisteredPlugin> RegisteredPlugins = new Dictionary<string, RegisteredPlugin>();
 
-        public static event Action<TwitchConnection, TwitchMessage> OnMessageReceived;
-        public static event Action<TwitchConnection> OnConnected;
-        public static event Action<TwitchConnection> OnChatJoined;
-        public static event Action<TwitchConnection, ChatUser> OnChatParted;
-        public static event Action<TwitchConnection, RoomState> OnRoomStateChanged;
-        public static event Action<string> OnRawMessageReceived;
+
 
         public static void OnLoad()
         {
@@ -55,11 +131,52 @@ namespace AsyncTwitch
         public void StartConnection()
         {
             if (_isConnected) return;
-            
+
             _loginInfo = Config.LoadFromJSON();
             if (_loginInfo.Username == "") return;
             Connect("irc.twitch.tv", 6667);
             _isConnected = true;
+        }
+
+        public void RegisterPlugin(string pluginIdentifier) {
+            if (RegisteredPlugins.ContainsKey(pluginIdentifier)) return;
+            RegisteredPlugins[pluginIdentifier] = new RegisteredPlugin();
+        }
+
+        public void RegisterOnConnected(string pluginIdentifier, Action<TwitchConnection> callback)
+        {
+            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
+            RegisteredPlugins[pluginIdentifier].OnConnected += callback;
+        }
+
+        public void RegisterOnRawMessageReceived(string pluginIdentifier, Action<string> callback)
+        {
+            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
+            RegisteredPlugins[pluginIdentifier].OnRawMessageReceived += callback;
+        }
+
+        public void RegisterOnRoomStateChanged(string pluginIdentifier, Action<TwitchConnection, RoomState> callback)
+        {
+            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
+            RegisteredPlugins[pluginIdentifier].OnRoomStateChanged += callback;
+        }
+
+        public void RegisterOnMessageReceived(string pluginIdentifier, Action<TwitchConnection, TwitchMessage> callback)
+        {
+            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
+            RegisteredPlugins[pluginIdentifier].OnMessageReceived += callback;
+        }
+
+        public void RegisterOnChatJoined(string pluginIdentifier, Action<TwitchConnection> callback)
+        {
+            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
+            RegisteredPlugins[pluginIdentifier].OnChatJoined += callback;
+        }
+
+        public void RegisterOnChatParted(string pluginIdentifier, TwitchConnection obj, Action<TwitchConnection,ChatUser> callback)
+        {
+            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
+            RegisteredPlugins[pluginIdentifier].OnChatParted += callback;
         }
 
         public override void OnConnect()
@@ -68,7 +185,8 @@ namespace AsyncTwitch
             SendRawMessage("PASS " + _loginInfo.OauthKey);
             SendRawMessage("NICK " + _loginInfo.Username);
             JoinRoom(_loginInfo.ChannelName);
-            OnConnected?.BeginInvoke(this, OnConnectedEventCallback, null);
+
+            foreach (KeyValuePair<string, RegisteredPlugin> kvp in RegisteredPlugins) kvp.Value.TryInvokeOnConnected(this);
         }
 
         //This is a simple Queueing system to avoid the ratelimit.
@@ -123,46 +241,7 @@ namespace AsyncTwitch
 
         private readonly Regex _roomStateRX =
             new Regex(@"@(?<Tags>.+)\s:tmi.twitch.tv ROOMSTATE #[A-Za-z0-9]+", RegexOptions.Compiled);
-        private readonly Regex _channelName = new Regex(@":tmi.twitch.tv\s(?<Command>\w+)\s#(?<Channel>[A-Za-z0-9]+)", RegexOptions.Compiled);
-
-        #endregion
-
-        #region EventCallbacks
-
-        private void OnConnectedEventCallback(IAsyncResult ar)
-        {
-            //Console.WriteLine("Connected Callback");
-            OnConnected.EndInvoke(ar);
-        }
-
-        private void OnJoinEventCallback(IAsyncResult ar)
-        {
-            //Console.WriteLine("Join Callback");
-            OnChatJoined.EndInvoke(ar);
-        }
-
-        private void OnPartEvenCallback(IAsyncResult ar)
-        {
-            //Console.WriteLine("Part Callback");
-            OnChatParted.EndInvoke(ar);
-        }
-
-        private void OnMessageReceivedCallback(IAsyncResult ar)
-        {
-            //Console.WriteLine("Message Callback");
-            OnMessageReceived.EndInvoke(ar);
-        }
-
-        private void OnRoomStateChangedCallback(IAsyncResult ar)
-        {
-            //Console.WriteLine("RoomState Callback");
-            OnRoomStateChanged.EndInvoke(ar);
-        }
-
-        private void OnRawMessageReceivedCallback(IAsyncResult ar)
-        {
-            OnRawMessageReceived.EndInvoke(ar);
-        }
+        private readonly Regex _channelName = new Regex(@":tmi.twitch.tv\s(?<Command>\w+)\s#(?<Channel>[A-Za-z0-9_]+)", RegexOptions.Compiled);
 
         #endregion
 
@@ -171,7 +250,7 @@ namespace AsyncTwitch
         public override void ProcessMessage(byte[] msg)
         {
             string stringMsg = Utf8NoBom.GetString(msg);
-            OnRawMessageReceived?.BeginInvoke(stringMsg, OnRawMessageReceivedCallback, null);
+            foreach (KeyValuePair<string, RegisteredPlugin> kvp in RegisteredPlugins) kvp.Value.TryInvokeOnRawMessageReceived(stringMsg);
 
             if (stringMsg == "PING :tmi.twitch.tv")
             {
@@ -194,8 +273,8 @@ namespace AsyncTwitch
                 {
                     Console.WriteLine(e);
                 }
-
-                OnRoomStateChanged?.BeginInvoke(this, RoomStates[channel], OnRoomStateChangedCallback, null);
+               
+                foreach (KeyValuePair<string, RegisteredPlugin> kvp in RegisteredPlugins) kvp.Value.TryInvokeOnRoomStateChanged(this, RoomStates[channel]);
                 return;
             }
 
@@ -233,13 +312,13 @@ namespace AsyncTwitch
                 message.Room = RoomStates[channel];
             }
 
-            OnMessageReceived?.BeginInvoke(this, message, OnMessageReceivedCallback, 0);
+            foreach (KeyValuePair<string, RegisteredPlugin> kvp in RegisteredPlugins) kvp.Value.TryInvokeOnMessageReceived(this, message);
         }
 
         //These events don't work very well due to caching and they don't have much data to begin with. don't use them.
         private bool FilterJoinPart(string msg, string channel)
         {
-            if (_joinRX.IsMatch(msg)) OnChatJoined?.BeginInvoke(this, OnJoinEventCallback, msg);
+            if (_joinRX.IsMatch(msg)) foreach (KeyValuePair<string, RegisteredPlugin> kvp in RegisteredPlugins) kvp.Value.TryInvokeOnChatJoined(this, msg);
 
             if (_partRX.IsMatch(msg))
             {
@@ -248,7 +327,7 @@ namespace AsyncTwitch
                 if (partedUser.User != null)
                 {
                     RoomStates[channel].RemoveUserFromList(username);
-                    OnChatParted?.BeginInvoke(this, partedUser.User, OnPartEvenCallback, msg);
+                    foreach (KeyValuePair<string, RegisteredPlugin> kvp in RegisteredPlugins) kvp.Value.TryInvokeOnChatParted(this, partedUser, msg); 
                 }
 
                 return true;
