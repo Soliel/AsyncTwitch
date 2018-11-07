@@ -58,6 +58,8 @@ namespace AsyncTwitch
                             tempConfig.OauthKey = "oauth:" + tempConfig.OauthKey;
                         }
                     }
+                    tempConfig.ChannelName = tempConfig.ChannelName.ToLower();
+                    tempConfig.Username = tempConfig.Username.ToLower();
 
                     return tempConfig;
                 }
