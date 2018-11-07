@@ -22,6 +22,8 @@ namespace AsyncTwitch
         public event Action<TwitchConnection, ChatUser> OnChatParted = null;
         public event Action<TwitchConnection, RoomState> OnRoomStateChanged = null;
         public event Action<string> OnRawMessageReceived = null;
+        public event Action<TwitchConnection, string> OnChannelJoined = null;
+        public event Action<TwitchConnection, string> OnChannelParted = null;
 
         public void TryInvokeOnConnected(TwitchConnection obj)
         {
@@ -53,7 +55,29 @@ namespace AsyncTwitch
             OnChatParted?.BeginInvoke(obj, user.User, OnPartEvenCallback, msg);
         }
 
+        public void TryInvokeOnChannelJoined(TwitchConnection obj, string channel)
+        {
+            OnChannelJoined?.BeginInvoke(obj, channel, OnChannelJoinedCallback, null);
+        }
+
+        public void TryInvokeOnChannelParted(TwitchConnection obj, string channel)
+        {
+            OnChannelParted?.BeginInvoke(obj, channel, OnChannelJoinedCallback, null);
+        }
+
         #region EventCallbacks
+
+        private void OnChannelJoinedCallback(IAsyncResult ar)
+        {
+            //Console.WriteLine("ChannelJoin Callback");
+            OnChannelJoined.EndInvoke(ar);
+        }
+
+        private void OnChannelPartedCallback(IAsyncResult ar)
+        {
+            //Console.WriteLine("ChannelPart Callback");
+            OnChannelParted.EndInvoke(ar);
+        }
 
         private void OnConnectedEventCallback(IAsyncResult ar)
         {
@@ -137,45 +161,78 @@ namespace AsyncTwitch
             _isConnected = true;
         }
 
-        public static void RegisterPlugin(string pluginIdentifier) {
+        public void RegisterPlugin(string pluginIdentifier) {
             if (RegisteredPlugins.ContainsKey(pluginIdentifier)) return;
             RegisteredPlugins[pluginIdentifier] = new RegisteredPlugin();
         }
 
-        public static void RegisterOnConnected(string pluginIdentifier, Action<TwitchConnection> callback)
+        public void RegisterOnConnected(string pluginIdentifier, Action<TwitchConnection> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnConnected += callback;
+
+            if (_isConnected)
+            {
+                RegisteredPlugins[pluginIdentifier].TryInvokeOnConnected(this);
+            }
         }
 
-        public static void RegisterOnRawMessageReceived(string pluginIdentifier, Action<string> callback)
+        public void RegisterOnRawMessageReceived(string pluginIdentifier, Action<string> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnRawMessageReceived += callback;
         }
 
-        public static void RegisterOnRoomStateChanged(string pluginIdentifier, Action<TwitchConnection, RoomState> callback)
+        public void RegisterOnRoomStateChanged(string pluginIdentifier, Action<TwitchConnection, RoomState> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnRoomStateChanged += callback;
+
+            foreach (KeyValuePair<string,RoomState> kvp in RoomStates)
+            {
+                if (kvp.Value.RoomID != String.Empty)
+                {
+                    RegisteredPlugins[pluginIdentifier].TryInvokeOnRoomStateChanged(this, kvp.Value);
+                }
+            }
         }
 
-        public static void RegisterOnMessageReceived(string pluginIdentifier, Action<TwitchConnection, TwitchMessage> callback)
+        public void RegisterOnMessageReceived(string pluginIdentifier, Action<TwitchConnection, TwitchMessage> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnMessageReceived += callback;
         }
 
-        public static void RegisterOnChatJoined(string pluginIdentifier, Action<TwitchConnection> callback)
+        public void RegisterOnChatJoined(string pluginIdentifier, Action<TwitchConnection> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnChatJoined += callback;
         }
 
-        public static void RegisterOnChatParted(string pluginIdentifier, TwitchConnection obj, Action<TwitchConnection,ChatUser> callback)
+        public void RegisterOnChatParted(string pluginIdentifier, Action<TwitchConnection, ChatUser> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnChatParted += callback;
+        }
+
+        public void RegisterOnChannelParted(string pluginIdentifier, Action<TwitchConnection, string> callback)
+        {
+            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
+            RegisteredPlugins[pluginIdentifier].OnChannelParted += callback;
+        }
+
+        public void RegisterOnChannelJoined(string pluginIdentifier, Action<TwitchConnection, string> callback)
+        {
+            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
+            RegisteredPlugins[pluginIdentifier].OnChannelJoined += callback;
+            
+            foreach (KeyValuePair<string, RoomState> kvp in RoomStates)
+            {
+                if (kvp.Value.RoomID != String.Empty)
+                {
+                    RegisteredPlugins[pluginIdentifier].TryInvokeOnChannelJoined(this, kvp.Key);
+                }
+            }
         }
 
         public override void OnConnect()
@@ -223,6 +280,18 @@ namespace AsyncTwitch
             RoomState newRoomState = new RoomState();
             RoomStates[channel] = newRoomState;
             SendRawMessage("JOIN #" + channel);
+
+            foreach (KeyValuePair<string, RegisteredPlugin> kvp in RegisteredPlugins) kvp.Value.TryInvokeOnChannelJoined(this, channel);
+        }
+
+        public void PartRoom(string channel)
+        {
+            if (!RoomStates.ContainsKey(channel)) return;
+
+            RoomStates.Remove(channel);
+            SendRawMessage("PART #" + channel);
+
+            foreach (KeyValuePair<string, RegisteredPlugin> kvp in RegisteredPlugins) kvp.Value.TryInvokeOnChannelParted(this, channel);
         }
 
         #region REGEX Lines
