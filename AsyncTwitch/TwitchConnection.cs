@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -49,6 +50,10 @@ namespace AsyncTwitch
         [UsedImplicitly]
         public void StartConnection()
         {
+            string pluginName = Assembly.GetCallingAssembly().FullName;
+
+            RegisterPlugin(pluginName);
+
             if (_isConnected) return;
 
             _loginInfo = Config.LoadFromJSON();
@@ -57,25 +62,30 @@ namespace AsyncTwitch
             _isConnected = true;
         }
 
-        public void RegisterPlugin(string pluginIdentifier) {
+        #region Registration
+
+        private void RegisterPlugin(string pluginIdentifier) {
             if (RegisteredPlugins.ContainsKey(pluginIdentifier)) return;
             RegisteredPlugins[pluginIdentifier] = new RegisteredPlugin();
         }
 
-        public void RegisterOnConnected(string pluginIdentifier, Action<TwitchConnection> callback)
+        public void RegisterOnConnected(Action<TwitchConnection> callback)
         {
+            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier]._onConnected += callback;
         }
 
-        public void RegisterOnRawMessageReceived(string pluginIdentifier, Action<string> callback)
+        public void RegisterOnRawMessageReceived(Action<string> callback)
         {
+            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier]._onRawMessageReceived += callback;
         }
 
-        public void RegisterOnRoomStateChanged(string pluginIdentifier, Action<TwitchConnection, RoomState> callback)
+        public void RegisterOnRoomStateChanged(Action<TwitchConnection, RoomState> callback)
         {
+            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier]._onRoomStateChanged += callback;
 
@@ -83,45 +93,52 @@ namespace AsyncTwitch
             {
                 if (kvp.Value.RoomID != String.Empty)
                 {
-                    new Task(() => RegisteredPlugins[pluginIdentifier].OnRoomStateChanged(this, kvp.Value)).Start();
+                    Task.Run(() => RegisteredPlugins[pluginIdentifier].OnRoomStateChanged(this, kvp.Value));
                 }
             }
         }
 
-        public void RegisterOnMessageReceived(string pluginIdentifier, Action<TwitchConnection, TwitchMessage> callback)
+        public void RegisterOnMessageReceived(Action<TwitchConnection, TwitchMessage> callback)
         {
+            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier]._onMessageReceived += callback;
         }
 
-        public void RegisterOnChatJoined(string pluginIdentifier, Action<TwitchConnection> callback)
+        public void RegisterOnChatJoined(Action<TwitchConnection> callback)
         {
+            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier]._onChatJoined += callback;
         }
 
-        public void RegisterOnChatParted(string pluginIdentifier, Action<TwitchConnection, ChatUser> callback)
+        public void RegisterOnChatParted(Action<TwitchConnection, ChatUser> callback)
         {
+            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier]._onChatParted += callback;
         }
 
-        public void RegisterOnChannelParted(string pluginIdentifier, Action<TwitchConnection, string> callback)
+        public void RegisterOnChannelParted(Action<TwitchConnection, string> callback)
         {
+            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier]._onChannelParted += callback;
         }
 
-        public void RegisterOnChannelJoined(string pluginIdentifier, Action<TwitchConnection, string> callback)
+        public void RegisterOnChannelJoined(Action<TwitchConnection, string> callback)
         {
+            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier]._onChannelJoined += callback;
 
             foreach (KeyValuePair<string, RoomState> kvp in RoomStates)
             {
-                new Task(() => RegisteredPlugins[pluginIdentifier].OnChannelJoined(this, kvp.Key)).Start(); 
+                Task.Run(() => RegisteredPlugins[pluginIdentifier].OnChannelJoined(this, kvp.Key)); 
             }
         }
+
+        #endregion
 
         public override void OnConnect()
         {
@@ -130,7 +147,7 @@ namespace AsyncTwitch
             SendRawMessage("NICK " + _loginInfo.Username);
             JoinRoom(_loginInfo.ChannelName);
 
-            new Task(() => OnConnectedTask(this)).Start();
+            Task.Run(() => OnConnectedTask(this));
         }
 
         //This is a simple Queueing system to avoid the ratelimit.
@@ -169,7 +186,7 @@ namespace AsyncTwitch
             RoomStates[channel] = newRoomState;
             SendRawMessage("JOIN #" + channel);
 
-            new Task(() => OnChannelJoinedTask(channel)).Start();
+            Task.Run(() => OnChannelJoinedTask(channel));
         }
 
         public void PartRoom(string channel)
@@ -179,7 +196,7 @@ namespace AsyncTwitch
             RoomStates.Remove(channel);
             SendRawMessage("PART #" + channel);
 
-            new Task(() => OnChannelPartedTask(channel)).Start();
+            Task.Run(() => OnChannelPartedTask(channel));
         }
 
         #region Event Tasks
@@ -331,7 +348,7 @@ namespace AsyncTwitch
         public override void ProcessMessage(byte[] msg)
         {
             string stringMsg = Utf8NoBom.GetString(msg);
-            new Task(() => OnRawMessageReceivedTask(stringMsg)).Start();
+            Task.Run(() => OnRawMessageReceivedTask(stringMsg));
 
             if (stringMsg == "PING :tmi.twitch.tv")
             {
@@ -355,7 +372,7 @@ namespace AsyncTwitch
                     Console.WriteLine(e);
                 }
 
-                new Task(() => OnRoomStateChangedTask(this, RoomStates[channel])).Start();
+                Task.Run(() => OnRoomStateChangedTask(this, RoomStates[channel]));
                 return;
             }
 
@@ -393,13 +410,13 @@ namespace AsyncTwitch
                 message.Room = RoomStates[channel];
             }
 
-            new Task(() => OnMessageReceivedTask(this, message)).Start();
+            Task.Run(() => OnMessageReceivedTask(this, message));
         }
 
         //These events don't work very well due to caching and they don't have much data to begin with. don't use them.
         private bool FilterJoinPart(string msg, string channel)
         {
-            if (_joinRX.IsMatch(msg)) new Task(() => OnChatJoinedTask(this, msg)).Start();
+            if (_joinRX.IsMatch(msg)) Task.Run(() => OnChatJoinedTask(this, msg));
 
             if (_partRX.IsMatch(msg))
             {
@@ -408,7 +425,7 @@ namespace AsyncTwitch
                 if (partedUser.User != null)
                 {
                     RoomStates[channel].RemoveUserFromList(username);
-                    new Task(() => OnChatPartedTask(this, partedUser, msg)).Start(); 
+                    Task.Run(() => OnChatPartedTask(this, partedUser, msg)); 
                 }
 
                 return true;
