@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -28,6 +29,7 @@ namespace AsyncTwitch
         private bool _isConnected;
         private DateTime _lastMessageTime = DateTime.Now;
         private Config _loginInfo;
+        private ConcurrentStack<Task> _taskQueue = new ConcurrentStack<Task>();
 
         public Encoding Utf8NoBom = new UTF8Encoding(false);
         //public RoomState RoomState = new RoomState();
@@ -47,12 +49,21 @@ namespace AsyncTwitch
             DontDestroyOnLoad(this);
         }
 
+        private void Update()
+        {
+            if (_taskQueue.Count > 0)
+            {
+                if (_taskQueue.TryPop(out var task))
+                {
+                    task.Start();
+                }
+            }
+        }
+
         [UsedImplicitly]
         public void StartConnection()
         {
-            string pluginName = Assembly.GetCallingAssembly().FullName;
-
-            RegisterPlugin(pluginName);
+            RegisterPlugin(Assembly.GetCallingAssembly().FullName);
 
             if (_isConnected) return;
 
@@ -64,77 +75,120 @@ namespace AsyncTwitch
 
         #region Registration
 
-        private void RegisterPlugin(string pluginIdentifier) {
-            if (RegisteredPlugins.ContainsKey(pluginIdentifier)) return;
-            RegisteredPlugins[pluginIdentifier] = new RegisteredPlugin();
+        private void RegisterPlugin(string pluginId) {
+            if (RegisteredPlugins.ContainsKey(pluginId)) return;
+            RegisteredPlugins[pluginId] = new RegisteredPlugin();
         }
 
-        public void RegisterOnConnected(Action<TwitchConnection> callback)
+        public Action<TwitchConnection> OnConnected
         {
-            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
-            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
-            RegisteredPlugins[pluginIdentifier]._onConnected += callback;
-        }
-
-        public void RegisterOnRawMessageReceived(Action<string> callback)
-        {
-            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
-            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
-            RegisteredPlugins[pluginIdentifier]._onRawMessageReceived += callback;
-        }
-
-        public void RegisterOnRoomStateChanged(Action<TwitchConnection, RoomState> callback)
-        {
-            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
-            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
-            RegisteredPlugins[pluginIdentifier]._onRoomStateChanged += callback;
-
-            foreach (KeyValuePair<string,RoomState> kvp in RoomStates)
+            get
             {
-                if (kvp.Value.RoomID != String.Empty)
+                return RegisteredPlugins[Assembly.GetCallingAssembly().FullName].GetOnConnected();
+            }
+            set
+            {
+                RegisteredPlugins[Assembly.GetCallingAssembly().FullName]._onConnected += value;
+            }
+        }
+
+        public Action<string> OnRawMessageReceived
+        {
+            get
+            {
+                return RegisteredPlugins[Assembly.GetCallingAssembly().FullName].GetOnRawMessageReceived();
+            }
+            set
+            {
+                RegisteredPlugins[Assembly.GetCallingAssembly().FullName]._onRawMessageReceived += value;
+            }
+        }
+
+        public Action<TwitchConnection, RoomState> OnRoomStateChanged
+        {
+            get
+            {
+                return RegisteredPlugins[Assembly.GetCallingAssembly().FullName].GetOnRoomStateChanged();
+            }
+            set
+            {
+                RegisteredPlugins[Assembly.GetCallingAssembly().FullName]._onRoomStateChanged += value;
+
+                string identifier = Assembly.GetCallingAssembly().FullName;
+                foreach (KeyValuePair<string, RoomState> kvp in RoomStates)
                 {
-                    Task.Run(() => RegisteredPlugins[pluginIdentifier].OnRoomStateChanged(this, kvp.Value));
+                    if (kvp.Value.RoomID != String.Empty)
+                    {
+                        _taskQueue.Push(new Task(() => RegisteredPlugins[identifier].OnRoomStateChanged(this, kvp.Value)));
+                    }
                 }
             }
         }
 
-        public void RegisterOnMessageReceived(Action<TwitchConnection, TwitchMessage> callback)
+        public Action<TwitchConnection, TwitchMessage> OnMessageReceived
         {
-            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
-            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
-            RegisteredPlugins[pluginIdentifier]._onMessageReceived += callback;
-        }
-
-        public void RegisterOnChatJoined(Action<TwitchConnection> callback)
-        {
-            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
-            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
-            RegisteredPlugins[pluginIdentifier]._onChatJoined += callback;
-        }
-
-        public void RegisterOnChatParted(Action<TwitchConnection, ChatUser> callback)
-        {
-            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
-            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
-            RegisteredPlugins[pluginIdentifier]._onChatParted += callback;
-        }
-
-        public void RegisterOnChannelParted(Action<TwitchConnection, string> callback)
-        {
-            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
-            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
-            RegisteredPlugins[pluginIdentifier]._onChannelParted += callback;
-        }
-
-        public void RegisterOnChannelJoined(Action<TwitchConnection, string> callback)
-        {
-            string pluginIdentifier = Assembly.GetCallingAssembly().FullName;
-            if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
-            RegisteredPlugins[pluginIdentifier]._onChannelJoined += callback;
-
-            foreach (KeyValuePair<string, RoomState> kvp in RoomStates)
+            get
             {
-                Task.Run(() => RegisteredPlugins[pluginIdentifier].OnChannelJoined(this, kvp.Key)); 
+                return RegisteredPlugins[Assembly.GetCallingAssembly().FullName].GetOnMessageReceived();
+            }
+            set
+            {
+                RegisteredPlugins[Assembly.GetCallingAssembly().FullName]._onMessageReceived += value;
+            }
+        }
+
+        public Action<TwitchConnection> OnChatJoined
+        {
+            get
+            {
+                return RegisteredPlugins[Assembly.GetCallingAssembly().FullName].GetOnChatJoined();
+            }
+            set
+            {
+                RegisteredPlugins[Assembly.GetCallingAssembly().FullName]._onChatJoined += value;
+            }
+        }
+
+        public Action<TwitchConnection, ChatUser> OnChatParted
+        {
+            get
+            {
+                return RegisteredPlugins[Assembly.GetCallingAssembly().FullName].GetOnChatParted();
+            }
+            set
+            {
+                RegisteredPlugins[Assembly.GetCallingAssembly().FullName]._onChatParted += value;
+            }
+        }
+
+        public Action<TwitchConnection, string> OnChannelParted
+        {
+            get
+            {
+                return RegisteredPlugins[Assembly.GetCallingAssembly().FullName].GetOnChannelParted();
+            }
+            set
+            {
+                RegisteredPlugins[Assembly.GetCallingAssembly().FullName]._onChannelParted += value;
+            }
+        }
+
+
+        public Action<TwitchConnection, string> OnChannelJoined
+        {
+            get
+            {
+                return RegisteredPlugins[Assembly.GetCallingAssembly().FullName].GetOnChannelJoined();
+            }
+            set
+            {
+                RegisteredPlugins[Assembly.GetCallingAssembly().FullName]._onChannelJoined += value;
+
+                string identifier = Assembly.GetCallingAssembly().FullName;
+                foreach (KeyValuePair<string, RoomState> kvp in RoomStates)
+                {
+                    _taskQueue.Push(new Task(() => RegisteredPlugins[identifier].OnChannelJoined(this, kvp.Key)));
+                }
             }
         }
 
@@ -297,7 +351,7 @@ namespace AsyncTwitch
             {
                 try
                 {
-                    kvp.Value.OnChatJoined(obj, msg);
+                    kvp.Value.OnChatJoined(obj);
                 }
                 catch (Exception e)
                 {
@@ -312,7 +366,7 @@ namespace AsyncTwitch
             {
                 try
                 {
-                    kvp.Value.OnChatParted(obj, listing, msg);
+                    kvp.Value.OnChatParted(obj, listing);
                 }
                 catch (Exception e)
                 {
