@@ -98,6 +98,8 @@ namespace AsyncTwitch
     public class TwitchConnection : IrcConnection
     {
         public static TwitchConnection Instance;
+        public static Dictionary<string, RegisteredPlugin> RegisteredPlugins = new Dictionary<string, RegisteredPlugin>();
+
         private readonly Queue<string> _messageQueue = new Queue<string>();
 
         //How long since the last message before we send another.
@@ -110,10 +112,7 @@ namespace AsyncTwitch
         public Encoding Utf8NoBom = new UTF8Encoding(false);
         //public RoomState RoomState = new RoomState();
         public Dictionary<string, RoomState> RoomStates = new Dictionary<string, RoomState>();
-        public Dictionary<string, RegisteredPlugin> RegisteredPlugins = new Dictionary<string, RegisteredPlugin>();
-
-
-
+        
         public static void OnLoad()
         {
             if (Instance != null) return;
@@ -138,42 +137,42 @@ namespace AsyncTwitch
             _isConnected = true;
         }
 
-        public void RegisterPlugin(string pluginIdentifier) {
+        public static void RegisterPlugin(string pluginIdentifier) {
             if (RegisteredPlugins.ContainsKey(pluginIdentifier)) return;
             RegisteredPlugins[pluginIdentifier] = new RegisteredPlugin();
         }
 
-        public void RegisterOnConnected(string pluginIdentifier, Action<TwitchConnection> callback)
+        public static void RegisterOnConnected(string pluginIdentifier, Action<TwitchConnection> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnConnected += callback;
         }
 
-        public void RegisterOnRawMessageReceived(string pluginIdentifier, Action<string> callback)
+        public static void RegisterOnRawMessageReceived(string pluginIdentifier, Action<string> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnRawMessageReceived += callback;
         }
 
-        public void RegisterOnRoomStateChanged(string pluginIdentifier, Action<TwitchConnection, RoomState> callback)
+        public static void RegisterOnRoomStateChanged(string pluginIdentifier, Action<TwitchConnection, RoomState> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnRoomStateChanged += callback;
         }
 
-        public void RegisterOnMessageReceived(string pluginIdentifier, Action<TwitchConnection, TwitchMessage> callback)
+        public static void RegisterOnMessageReceived(string pluginIdentifier, Action<TwitchConnection, TwitchMessage> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnMessageReceived += callback;
         }
 
-        public void RegisterOnChatJoined(string pluginIdentifier, Action<TwitchConnection> callback)
+        public static void RegisterOnChatJoined(string pluginIdentifier, Action<TwitchConnection> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnChatJoined += callback;
         }
 
-        public void RegisterOnChatParted(string pluginIdentifier, TwitchConnection obj, Action<TwitchConnection,ChatUser> callback)
+        public static void RegisterOnChatParted(string pluginIdentifier, TwitchConnection obj, Action<TwitchConnection,ChatUser> callback)
         {
             if (!RegisteredPlugins.ContainsKey(pluginIdentifier)) RegisterPlugin(pluginIdentifier);
             RegisteredPlugins[pluginIdentifier].OnChatParted += callback;
