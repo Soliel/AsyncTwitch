@@ -153,6 +153,7 @@ namespace AsyncTwitch
                 SendRawMessage("NICK " + _loginInfo.Username);
             }
 
+
             if(_loginInfo.ChannelName != String.Empty) JoinRoom(_loginInfo.ChannelName);
 
             Task.Run(() => OnConnectedTask(this));
@@ -166,7 +167,7 @@ namespace AsyncTwitch
             if (DateTime.Now - _lastMessageTime >= _rateLimit) Send("PRIVMSG #" + _loginInfo.ChannelName + " :" + msg);
             _messageQueue.Enqueue("PRIVMSG #" + _loginInfo.ChannelName + " :" + msg);
             DateTime timeUntilRateLimit = _lastMessageTime.Add(_rateLimit);
-            Task.Delay(timeUntilRateLimit - DateTime.Now).ContinueWith(SendMessageFromQueue);
+            Task.Delay((timeUntilRateLimit - DateTime.Now) < TimeSpan.Zero ? TimeSpan.Zero : timeUntilRateLimit - DateTime.Now).ContinueWith(SendMessageFromQueue);
             _lastMessageTime = timeUntilRateLimit;
         }
 
@@ -175,7 +176,7 @@ namespace AsyncTwitch
             if (DateTime.Now - _lastMessageTime >= _rateLimit) Send(msg);
             _messageQueue.Enqueue(msg);
             DateTime timeUntilRateLimit = _lastMessageTime.Add(_rateLimit);
-            Task.Delay(timeUntilRateLimit - DateTime.Now).ContinueWith(SendMessageFromQueue);
+            Task.Delay((timeUntilRateLimit - DateTime.Now) < TimeSpan.Zero ? TimeSpan.Zero : timeUntilRateLimit - DateTime.Now).ContinueWith(SendMessageFromQueue);
             _lastMessageTime = timeUntilRateLimit;
         }
 
@@ -189,7 +190,6 @@ namespace AsyncTwitch
         public void JoinRoom(string channel)
         {
             if (channel != String.Empty) channel = channel.ToLower();
-
             if (RoomStates.ContainsKey(channel)) return;
 
             RoomState newRoomState = new RoomState();
@@ -349,7 +349,7 @@ namespace AsyncTwitch
 
         private readonly Regex _roomStateRX =
             new Regex(@"@(?<Tags>.+)\s:tmi.twitch.tv ROOMSTATE #[A-Za-z0-9]+", RegexOptions.Compiled);
-        private readonly Regex _channelName = new Regex(@":tmi.twitch.tv\s(?<Command>\w+)\s#(?<Channel>[A-Za-z0-9_]+)", RegexOptions.Compiled);
+        private readonly Regex _channelName = new Regex(@"tmi\.twitch\.tv\s(?<Command>\w+)\s#(?<Channel>[A-Za-z0-9_]+)", RegexOptions.Compiled);
 
         #endregion
 
@@ -370,7 +370,6 @@ namespace AsyncTwitch
                 channel = _channelName.Match(stringMsg).Groups["Channel"].Value;
 
             if (FilterJoinPart(stringMsg, channel)) return;
-
             if (_roomStateRX.IsMatch(stringMsg))
             {
                 try
