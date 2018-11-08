@@ -25,7 +25,7 @@ namespace AsyncTwitch
         //How long since the last message before we send another.
         private readonly TimeSpan _rateLimit = new TimeSpan(0, 0, 0, 1, 500);
 
-        private bool _isConnected;
+        public static bool IsConnected;
         private DateTime _lastMessageTime = DateTime.Now;
         private Config _loginInfo;
 
@@ -54,12 +54,12 @@ namespace AsyncTwitch
 
             RegisterPlugin(pluginName);
 
-            if (_isConnected) return;
+            if (IsConnected) return;
 
             _loginInfo = Config.LoadFromJSON();
-            if (_loginInfo.Username == "") return;
+            //if (_loginInfo.Username == "") return;
             Connect("irc.twitch.tv", 6667);
-            _isConnected = true;
+            IsConnected = true;
         }
 
         #region Registration
@@ -143,9 +143,17 @@ namespace AsyncTwitch
         public override void OnConnect()
         {
             SendRawMessage("CAP REQ :twitch.tv/membership twitch.tv/commands twitch.tv/tags");
-            SendRawMessage("PASS " + _loginInfo.OauthKey);
-            SendRawMessage("NICK " + _loginInfo.Username);
-            JoinRoom(_loginInfo.ChannelName);
+            if (_loginInfo.Username == String.Empty || _loginInfo.OauthKey == String.Empty)
+            {
+                SendRawMessage("NICK justinfan" + new System.Random(DateTime.Now.Millisecond).Next(1000, 100000).ToString());
+            }
+            else
+            {
+                SendRawMessage("PASS " + _loginInfo.OauthKey);
+                SendRawMessage("NICK " + _loginInfo.Username);
+            }
+
+            if(_loginInfo.ChannelName != String.Empty) JoinRoom(_loginInfo.ChannelName);
 
             Task.Run(() => OnConnectedTask(this));
         }
@@ -180,6 +188,8 @@ namespace AsyncTwitch
         [UsedImplicitly]
         public void JoinRoom(string channel)
         {
+            if (channel != String.Empty) channel = channel.ToLower();
+
             if (RoomStates.ContainsKey(channel)) return;
 
             RoomState newRoomState = new RoomState();
