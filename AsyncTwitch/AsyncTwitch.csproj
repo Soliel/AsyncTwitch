@@ -24,6 +24,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <OutputPath>D:\SteamLibrary\steamapps\common\Beat Saber\Plugins\</OutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -44,6 +45,7 @@
     <Compile Include="ChatUser.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="IrcConnection.cs" />
+    <Compile Include="RegisteredPlugins.cs" />
     <Compile Include="RoomState.cs" />
     <Compile Include="TwitchConnection.cs" />
     <Compile Include="TwitchEmote.cs" />

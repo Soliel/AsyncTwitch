@@ -164,7 +164,11 @@ namespace AsyncTwitch
         [UsedImplicitly]
         public void SendChatMessage(string msg)
         {
-            if (DateTime.Now - _lastMessageTime >= _rateLimit) Send("PRIVMSG #" + _loginInfo.ChannelName + " :" + msg);
+            if (DateTime.Now - _lastMessageTime >= _rateLimit)
+            {
+                Send("PRIVMSG #" + _loginInfo.ChannelName + " :" + msg);
+                return;
+            }
             _messageQueue.Enqueue("PRIVMSG #" + _loginInfo.ChannelName + " :" + msg);
             DateTime timeUntilRateLimit = _lastMessageTime.Add(_rateLimit);
             Task.Delay((timeUntilRateLimit - DateTime.Now) < TimeSpan.Zero ? TimeSpan.Zero : timeUntilRateLimit - DateTime.Now).ContinueWith(SendMessageFromQueue);
@@ -173,7 +177,11 @@ namespace AsyncTwitch
 
         public void SendRawMessage(string msg)
         {
-            if (DateTime.Now - _lastMessageTime >= _rateLimit) Send(msg);
+            if (DateTime.Now - _lastMessageTime >= _rateLimit)
+            {
+                Send(msg);
+                return;
+            }
             _messageQueue.Enqueue(msg);
             DateTime timeUntilRateLimit = _lastMessageTime.Add(_rateLimit);
             Task.Delay((timeUntilRateLimit - DateTime.Now) < TimeSpan.Zero ? TimeSpan.Zero : timeUntilRateLimit - DateTime.Now).ContinueWith(SendMessageFromQueue);
