@@ -1,10 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
+using NLog;
 using UnityEngine;
+using Logger = NLog.Logger;
 
 namespace AsyncTwitch
 {
@@ -14,30 +14,34 @@ namespace AsyncTwitch
         public string Username;
         public string ChannelName;
         public string OauthKey;
+        private Logger _logger;
 
         public Config(string username, string channelName, string oauthKey)
         {
             Username = username.ToLower();
             ChannelName = channelName.ToLower();
             OauthKey = oauthKey;
+            _logger = LogManager.GetCurrentClassLogger();
         }
 
         public static void CreateDefaultConfig()
         {
             Config defaultConfig = new Config("Default Username", "Default Channel Name", "Default Oauth Key");
-            defaultConfig.SaveJSON();
+            defaultConfig.SaveJson();
+            defaultConfig._logger.Info("Creating default config file.");
         }
 
-        public void SaveJSON()
+        public void SaveJson()
         {
             using(FileStream fs = new FileStream("UserData/AsyncTwitchConfig.json", FileMode.Create, FileAccess.Write))
             {
-                byte[] Buffer = Encoding.ASCII.GetBytes(JsonUtility.ToJson(this, true));
-                fs.Write(Buffer, 0, Buffer.Length);
+                byte[] buffer = Encoding.ASCII.GetBytes(JsonUtility.ToJson(this, true));
+                fs.Write(buffer, 0, buffer.Length);
+                _logger.Info("Saving config file.");
             }
         }
 
-        public static Config LoadFromJSON()
+        public static Config LoadFromJson()
         {
             if (File.Exists("UserData/AsyncTwitchConfig.json"))
             {
@@ -48,6 +52,7 @@ namespace AsyncTwitch
                     Config tempConfig = JsonUtility.FromJson<Config>(Encoding.ASCII.GetString(loadBytes));
                     if (!tempConfig.OauthKey.StartsWith("oauth:"))
                     {
+                        tempConfig._logger.Info("Oauth key not valid attempting to fix.");
                         if (tempConfig.OauthKey.Contains(':'))
                         {
                             string[] oauthSplit = tempConfig.OauthKey.Split(':');

@@ -7,7 +7,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
+using NLog;
 using UnityEngine;
+using Logger = NLog.Logger;
 
 /*
  * TODO: Logging.
@@ -28,6 +30,7 @@ namespace AsyncTwitch
         public static bool IsConnected;
         private DateTime _lastMessageTime = DateTime.Now;
         private Config _loginInfo;
+        private Logger _logger;
 
         public Encoding Utf8NoBom = new UTF8Encoding(false);
         //public RoomState RoomState = new RoomState();
@@ -43,6 +46,7 @@ namespace AsyncTwitch
         [UsedImplicitly]
         private void Awake()
         {
+            _logger = LogManager.GetCurrentClassLogger();
             Instance = this;
             DontDestroyOnLoad(this);
         }
@@ -56,7 +60,7 @@ namespace AsyncTwitch
 
             if (IsConnected) return;
 
-            _loginInfo = Config.LoadFromJSON();
+            _loginInfo = Config.LoadFromJson();
             //if (_loginInfo.Username == "") return;
             Connect("irc.twitch.tv", 6667);
             IsConnected = true;
@@ -365,21 +369,41 @@ namespace AsyncTwitch
 
         public override void ProcessMessage(byte[] msg)
         {
-            string stringMsg = Utf8NoBom.GetString(msg);
-            Task.Run(() => OnRawMessageReceivedTask(stringMsg));
+            _logger.Trace("Entered into subclass.");
+            string stringMsg = "";
+            try
+            {
+                stringMsg = Utf8NoBom.GetString(msg);
+                Task.Run(() => OnRawMessageReceivedTask(stringMsg));
+            }
+            catch (Exception e)
+            {
+                _logger.Error(e);
+            }
+
+            _logger.Trace(stringMsg);
 
             if (stringMsg == "PING :tmi.twitch.tv")
             {
+                _logger.Trace("Received ping, sending pong.");
                 Send("PONG :tmi.twitch.tv");
             }
-
             string channel = "";
-            if (_channelName.IsMatch(stringMsg))
-                channel = _channelName.Match(stringMsg).Groups["Channel"].Value;
 
-            if (FilterJoinPart(stringMsg, channel)) return;
+            try
+            {
+                if (_channelName.IsMatch(stringMsg))
+                    channel = _channelName.Match(stringMsg).Groups["Channel"].Value;
+            }
+            catch (Exception e)
+            {
+                _logger.Error(e);
+            }
+
+            //if (FilterJoinPart(stringMsg, channel)) return;
             if (_roomStateRX.IsMatch(stringMsg))
             {
+                _logger.Trace("Roomstate Found.");
                 try
                 {
                     FilterRoomState(stringMsg, channel);
@@ -393,6 +417,7 @@ namespace AsyncTwitch
                 return;
             }
 
+            _logger.Trace("Parsing message.");
             TwitchMessage message = new TwitchMessage();
             string[] splitMsg = stringMsg.Split(new[] {" :"}, 3, StringSplitOptions.RemoveEmptyEntries); 
             if (splitMsg.Length >= 3)
@@ -437,12 +462,29 @@ namespace AsyncTwitch
 
             if (_partRX.IsMatch(msg))
             {
-                string username = _partRX.Match(msg).Groups["User"].Value;
-                ChatUserListing partedUser = RoomStates[channel].UserList.FirstOrDefault(x => x.User.DisplayName == username);
+                ChatUserListing partedUser = null;
+                string username = "";
+                try
+                {
+                    username = _partRX.Match(msg).Groups["User"].Value;
+                    partedUser = RoomStates[channel].UserList.FirstOrDefault(x => x.User.DisplayName == username);
+                }
+                catch (Exception e)
+                {
+                    _logger.Error(e);
+                }
+
                 if (partedUser.User != null)
                 {
-                    RoomStates[channel].RemoveUserFromList(username);
-                    Task.Run(() => OnChatPartedTask(this, partedUser, msg)); 
+                    try
+                    {
+                        RoomStates[channel].RemoveUserFromList(username);
+                        Task.Run(() => OnChatPartedTask(this, partedUser, msg));
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.Error(e);
+                    }
                 }
 
                 return true;

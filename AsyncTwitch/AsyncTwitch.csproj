@@ -64,6 +64,10 @@
       <HintPath>..\..\Resources\IllusionPlugin.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="NLog">
+      <HintPath>D:\SteamLibrary\steamapps\common\Beat Saber\NLog.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Net" />
     <Reference Include="UnityEngine, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">

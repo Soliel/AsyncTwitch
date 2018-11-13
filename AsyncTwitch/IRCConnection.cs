@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using NLog;
 using UnityEngine;
+using Logger = NLog.Logger;
 
 namespace AsyncTwitch
 {
@@ -22,10 +24,11 @@ namespace AsyncTwitch
         private Queue<byte[]> _receivedQueue = new Queue<byte[]>();
 
         private readonly object _readLock = new object();
-        private bool _reading = false;
-        private int _reconnectCount = 0;
+        private bool _reading;
+        private int _reconnectCount;
         private string _storedhost;
         private ushort _storedport;
+        private Logger _logger;
         #endregion
 
         public abstract void OnConnect();
@@ -34,8 +37,16 @@ namespace AsyncTwitch
 
         internal void Connect(string host, ushort port)
         {
+            if (_logger == null)
+            {
+                _logger = LogManager.GetCurrentClassLogger();
+            }
+
             _twitchSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            _twitchSocket.BeginConnect(host, port, new AsyncCallback(ConnectCallback), null);
+            _twitchSocket.BeginConnect(host, port, ConnectCallback, null);
+            _logger.Info($"Beginning connection to server {host}:{port}");
+            _storedhost = host;
+            _storedport = port; 
         }
 
         private void ConnectCallback(IAsyncResult ar)
@@ -46,11 +57,14 @@ namespace AsyncTwitch
                 if (_reconnectCount > RECONNECT_LIMIT)
                 {
                     _reconnectCount = 0;
+                    _logger.Info("Socket reconnect limit reached. Aborting.");
                     return;
                 }
+                _logger.Info("Socket failed to connect to server retrying.");
                 _reconnectCount++;
                 Connect(_storedhost, _storedport);
             }
+            _logger.Info("Connected! Beginning to receive data.");
             _twitchSocket.BeginReceive(_buffer, 0, BUFFER_SIZE, SocketFlags.None, new AsyncCallback(Receive), null);
             OnConnect();
         }
@@ -76,27 +90,30 @@ namespace AsyncTwitch
                 }
 
                 Disconnect();
-                Console.WriteLine(e.ToString());
+                _logger.Debug($"Unable to recieve data. Aborting with error: {e}");
                 return;
             }
 
-            var receivedBytes = new byte[byteLength];
+            _logger.Trace($"Received {byteLength} bytes of data.");
+            byte[] receivedBytes = new byte[byteLength];
 
             //Copy can fail so we wrap in a try catch. If it does our network data isn't worth looking at anymore so we reconnect.
             try
             {
+                _logger.Trace("Attempting to copy from global buffer.");
                 Array.Copy(_buffer, receivedBytes, receivedBytes.Length); //Free up our buffer as fast as possible.
             }
             catch (Exception e)
             {
                 Disconnect();
-                Console.WriteLine(e.ToString());
+                _logger.Debug($"Unable to copy to global buffer with error: {e}");
                 return;
             }
 
             //Queue our bytes to send to another thread. Lock the queue for thread safety.
             lock (_receivedQueue)
             {
+                _logger.Trace("Queueing data.");
                 _receivedQueue.Enqueue(receivedBytes);
             }
 
@@ -105,6 +122,7 @@ namespace AsyncTwitch
             {
                 if (!_reading)
                 {
+                    _logger.Info("Queing a new ProcessReceived task.");
                     _reading = true;
                     ThreadPool.QueueUserWorkItem(ProcessReceived);
                 }
@@ -115,6 +133,8 @@ namespace AsyncTwitch
 
         internal void Send(string data)
         {
+            if (!_twitchSocket.Connected) return;
+            _logger.Info("Sending message.");
             List<byte> byteData = new List<byte>(Encoding.ASCII.GetBytes(data));
             byteData.AddRange(EOF);
             _twitchSocket.BeginSend(byteData.ToArray(), 0, byteData.Count, 0, SendCallback, null);
@@ -125,10 +145,11 @@ namespace AsyncTwitch
             try
             {
                 _twitchSocket.EndSend(ar);
+                _logger.Info("Sending completed.");
             }
             catch (Exception e)
             {
-                Console.WriteLine(e.ToString());
+                _logger.Debug($"Unable to send data with error: {e}");
             }
         }
 
@@ -154,6 +175,7 @@ namespace AsyncTwitch
                             break;
                         }
 
+                        _logger.Trace("Attempting dequeue.");
                         nextBytes = _receivedQueue.Peek().Length;
                         nextBuffer = _receivedQueue.Dequeue();
                     }
@@ -176,7 +198,7 @@ namespace AsyncTwitch
                     }
                     catch(Exception e)
                     {
-                        Console.WriteLine(e.ToString());
+                        _logger.Error(e.ToString());
                         Disconnect();
                         break;
                     }
@@ -185,6 +207,11 @@ namespace AsyncTwitch
 
                 //By this point readBuffer should have some data we can operate on.
                 int offset = FindBytePattern(readBuffer, EOF, 0);
+                if (offset == -1)
+                {
+                    _logger.Debug("Found a malformed packet.");
+                    break;
+                }
                 byte[] processedData = new byte[offset]; //Set the length to offset + 1 to contain a full message.
 
                 try
@@ -193,12 +220,13 @@ namespace AsyncTwitch
                 }
                 catch(Exception e)
                 {
-                    Console.WriteLine(e.ToString());
+                    _logger.Error(e.ToString());
                     Disconnect(); 
                     break;
                 }
 
                 //processed Data now holds a single IRC message so we will pass that into another function.
+                _logger.Trace("Moving into subclass.");
                 ProcessMessage(processedData);
 
                 //Time to clean up
@@ -220,6 +248,7 @@ namespace AsyncTwitch
 
         public void Disconnect()
         {
+            _reading = false;
             _twitchSocket.BeginDisconnect(true, DisconnectCallback, null);
         }
 
