@@ -54,16 +54,19 @@ namespace AsyncTwitch
         [UsedImplicitly]
         public void StartConnection()
         {
-            string pluginName = Assembly.GetCallingAssembly().FullName;
+            lock (Instance)
+            {
+                string pluginName = Assembly.GetCallingAssembly().FullName;
 
-            RegisterPlugin(pluginName);
+                RegisterPlugin(pluginName);
 
-            if (IsConnected) return;
+                if (IsConnected) return;
 
-            _loginInfo = Config.LoadFromJson();
-            //if (_loginInfo.Username == "") return;
-            Connect("irc.twitch.tv", 6667);
-            IsConnected = true;
+                _loginInfo = Config.LoadFromJson();
+                //if (_loginInfo.Username == "") return;
+                Connect("irc.twitch.tv", 6667);
+                IsConnected = true;
+            }
         }
 
         #region Registration
@@ -362,6 +365,7 @@ namespace AsyncTwitch
         private readonly Regex _roomStateRX =
             new Regex(@"@(?<Tags>.+)\s:tmi.twitch.tv ROOMSTATE #[A-Za-z0-9]+", RegexOptions.Compiled);
         private readonly Regex _channelName = new Regex(@"tmi\.twitch\.tv\s(?<Command>\w+)\s#(?<Channel>[A-Za-z0-9_]+)", RegexOptions.Compiled);
+        private readonly Regex _userName = new Regex(@"\s:(?<User>[A-Za-z0-9_]+)![A-Za-z0-9_]+@[A-Za-z0-9_]+\.", RegexOptions.Compiled);
 
         #endregion
 
@@ -544,10 +548,10 @@ namespace AsyncTwitch
         }
 
         //Called on UserMessaging to create the ChatUser object.
-        public ChatUser CreateChatUser(string chatJoin)
+        public ChatUser CreateChatUser(string chatMsg)
         {
             ChatUser newUser = new ChatUser();
-            MatchCollection badgesCollection = _badgeRX.Matches(chatJoin);
+            MatchCollection badgesCollection = _badgeRX.Matches(chatMsg);
             newUser.Badges = new Badge[badgesCollection.Count];
             int i = 0;
 
@@ -557,14 +561,14 @@ namespace AsyncTwitch
                 Badge badge = new Badge(badgeInfo[0], int.Parse(badgeInfo[1]));
                 newUser.Badges[i] = badge;
 
-                if (badgeInfo[0] == "broadcaster") newUser.IsBroadcaster = true;
-
-                if (badgeInfo[0] == "subscriber") newUser.IsSubscriber = true;
+                newUser.IsBroadcaster = badgeInfo[0] == "broadcaster";
+                newUser.IsSubscriber = badgeInfo[0] == "subscriber";
+                newUser.IsVIP = badgeInfo[0] == "vip";
 
                 i++;
             }
 
-            string[] tagFilteredString = chatJoin.Split(':');
+            string[] tagFilteredString = chatMsg.Split(':');
             tagFilteredString = tagFilteredString[0].Split(';');
 
             foreach (string msgTag in tagFilteredString)
@@ -586,6 +590,12 @@ namespace AsyncTwitch
                         newUser.IsMod = int.Parse(tagParts[1]) > 0;
                         break;
                 }
+            }
+
+            if (newUser.DisplayName == "" && _channelName.IsMatch(chatMsg))
+            {
+                Match userMatch = _userName.Match(chatMsg);
+                newUser.DisplayName = userMatch.Groups["User"].Value;
             }
 
             return newUser;
