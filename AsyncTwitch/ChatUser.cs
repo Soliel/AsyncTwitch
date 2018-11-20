@@ -17,6 +17,8 @@ namespace AsyncTwitch
         public bool IsBroadcaster;
         //Is the user a Subscriber to the channel.
         public bool IsSubscriber;
+        //The VIP status of the user
+        public bool IsVIP;
         //All the badges the user has.
         public Badge[] Badges;
 
@@ -29,6 +31,7 @@ namespace AsyncTwitch
             IsBroadcaster = false;
             Badges = new Badge[0];
             IsSubscriber = false;
+            IsVIP = false;
         }
 
         public override string ToString()
