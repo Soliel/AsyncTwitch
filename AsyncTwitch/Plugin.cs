@@ -12,7 +12,7 @@ namespace AsyncTwitch
     {
         public string Name => "Asynchronous Twitch Library";
 
-        public string Version => "1.0.0";
+        public string Version => "1.1.2";
 
         public void OnApplicationQuit()
         {  
@@ -24,8 +24,9 @@ namespace AsyncTwitch
             FileTarget logFile = new FileTarget("logfile") {FileName = "AsyncTwitchLog.txt"};
             ConsoleTarget logConsole = new ConsoleTarget("logconsole");
 
-            nLogConfig.AddRule(LogLevel.Trace, LogLevel.Off, logFile);
-            nLogConfig.AddRule(LogLevel.Trace, LogLevel.Off, logConsole);
+            nLogConfig.AddRule(LogLevel.Debug, LogLevel.Fatal, logFile);
+            nLogConfig.AddRule(LogLevel.Debug, LogLevel.Fatal, logConsole);
+            LogManager.Configuration = nLogConfig;
 
             TwitchConnection.OnLoad();
         }
