@@ -1,12 +1,18 @@
 ﻿using IllusionPlugin;
+using JetBrains.Annotations;
+using NLog;
+using NLog.Config;
+using NLog.Targets;
+using UnityEngine.SceneManagement;
 
 namespace AsyncTwitch
 {
-    class Plugin : IPlugin
+    [UsedImplicitly]
+    public class Plugin : IPlugin
     {
         public string Name => "Asynchronous Twitch Library";
 
-        public string Version => "1.0.0";
+        public string Version => "1.1.2";
 
         public void OnApplicationQuit()
         {  
@@ -14,6 +20,15 @@ namespace AsyncTwitch
 
         public void OnApplicationStart()
         {
+            LoggingConfiguration nLogConfig = new LoggingConfiguration();
+            FileTarget logFile = new FileTarget("logfile") {FileName = "AsyncTwitchLog.txt"};
+            ConsoleTarget logConsole = new ConsoleTarget("logconsole");
+
+            nLogConfig.AddRule(LogLevel.Debug, LogLevel.Fatal, logFile);
+            nLogConfig.AddRule(LogLevel.Debug, LogLevel.Fatal, logConsole);
+            LogManager.Configuration = nLogConfig;
+
+            TwitchConnection.OnLoad();
         }
 
         public void OnFixedUpdate()
@@ -22,7 +37,7 @@ namespace AsyncTwitch
 
         public void OnLevelWasInitialized(int level)
         {
-            if (level != 0) return;
+            if(SceneManager.GetActiveScene().name != "Menu") return;
             TwitchConnection.OnLoad();
         }
 

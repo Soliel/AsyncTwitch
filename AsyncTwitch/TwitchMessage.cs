@@ -16,6 +16,8 @@ namespace AsyncTwitch
         public TwitchEmote[] Emotes;
         //The Id of the message
         public string Id;
+        //The room the message was sent in.
+        public RoomState Room;
         //The Raw message incase I miss something.
         public string RawMessage;
 

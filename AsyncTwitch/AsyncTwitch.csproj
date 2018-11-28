@@ -21,10 +21,10 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>D:\SteamLibrary\steamapps\common\Beat Saber\Plugins\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <OutputPath>D:\SteamLibrary\steamapps\common\Beat Saber\Plugins\</OutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -39,6 +39,24 @@
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="AsyncTwitch.cs" />
+    <Compile Include="CommandEnum.cs" />
+    <Compile Include="Config.cs" />
+    <Compile Include="Plugin.cs" />
+    <Compile Include="ChatUser.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="IrcConnection.cs" />
+    <Compile Include="RegisteredPlugins.cs" />
+    <Compile Include="RoomState.cs" />
+    <Compile Include="TwitchConnection.cs" />
+    <Compile Include="TwitchEmote.cs" />
+    <Compile Include="TwitchMessage.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>..\..\Resources\Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="IllusionInjector">
       <HintPath>..\..\Resources\IllusionInjector.dll</HintPath>
       <Private>False</Private>
@@ -47,19 +65,19 @@
       <HintPath>..\..\Resources\IllusionPlugin.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="NLog">
+      <HintPath>D:\SteamLibrary\steamapps\common\Beat Saber\NLog.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Xml" />
-    <Reference Include="UnityEngine">
+    <Reference Include="System.Net" />
+    <Reference Include="UnityEngine, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\Resources\UnityEngine.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.CoreModule">
+    <Reference Include="UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\Resources\UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
@@ -67,22 +85,6 @@
       <HintPath>..\..\Resources\UnityEngine.JSONSerializeModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="AsyncTwitch.cs" />
-    <Compile Include="Config.cs" />
-    <Compile Include="Plugin.cs" />
-    <Compile Include="ChatUser.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="IrcConnection.cs" />
-    <Compile Include="RoomState.cs" />
-    <Compile Include="TwitchConnection.cs" />
-    <Compile Include="TwitchEmote.cs" />
-    <Compile Include="TwitchMessage.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="App.config" />
-    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
