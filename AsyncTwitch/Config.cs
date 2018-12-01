@@ -26,7 +26,7 @@ namespace AsyncTwitch
 
         public static void CreateDefaultConfig()
         {
-            Config defaultConfig = new Config("Default Username", "Default Channel Name", "Default Oauth Key");
+            Config defaultConfig = new Config("", "", "");
             defaultConfig.SaveJson();
             defaultConfig._logger.Info("Creating default config file.");
         }
