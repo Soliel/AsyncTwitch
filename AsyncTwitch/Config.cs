@@ -50,7 +50,7 @@ namespace AsyncTwitch
                     byte[] loadBytes = new byte[fs.Length];
                     fs.Read(loadBytes, 0, (int)fs.Length);
                     Config tempConfig = JsonUtility.FromJson<Config>(Encoding.ASCII.GetString(loadBytes));
-                    if (!tempConfig.OauthKey.StartsWith("oauth:"))
+                    if (!tempConfig.OauthKey.StartsWith("oauth:") && tempConfig.OauthKey != String.Empty)
                     {
                         tempConfig._logger.Info("Oauth key not valid attempting to fix.");
                         if (tempConfig.OauthKey.Contains(':'))
@@ -63,8 +63,8 @@ namespace AsyncTwitch
                             tempConfig.OauthKey = "oauth:" + tempConfig.OauthKey;
                         }
                     }
-                    tempConfig.ChannelName = tempConfig.ChannelName.ToLower();
-                    tempConfig.Username = tempConfig.Username.ToLower();
+                    tempConfig.ChannelName = tempConfig.ChannelName?.ToLower();
+                    tempConfig.Username = tempConfig.Username?.ToLower();
 
                     return tempConfig;
                 }
