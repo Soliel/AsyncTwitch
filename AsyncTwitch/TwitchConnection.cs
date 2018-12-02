@@ -31,6 +31,7 @@ namespace AsyncTwitch
         private DateTime _lastMessageTime = DateTime.Now;
         private Config _loginInfo;
         private Logger _logger;
+        private int _lastReconnectCount = 0;
 
         public Encoding Utf8NoBom = new UTF8Encoding(false);
         //public RoomState RoomState = new RoomState();
@@ -147,7 +148,6 @@ namespace AsyncTwitch
 
         #endregion
 
-        int _lastReconnectCount = 0;
         public override void OnConnect()
         {
             SendRawMessage("CAP REQ :twitch.tv/membership twitch.tv/commands twitch.tv/tags");
