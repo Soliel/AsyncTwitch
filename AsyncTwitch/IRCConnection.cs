@@ -25,7 +25,8 @@ namespace AsyncTwitch
 
         private readonly object _readLock = new object();
         private bool _reading;
-        private int _reconnectCount;
+        protected int _reconnectCount;
+        private bool _firstConnection = true;
         private string _storedhost;
         private ushort _storedport;
         private Logger _logger;
@@ -61,7 +62,10 @@ namespace AsyncTwitch
                     return;
                 }
                 _logger.Info("Socket failed to connect to server retrying.");
-                _reconnectCount++;
+                if (_firstConnection)
+                    _firstConnection = false;
+                else
+                    _reconnectCount++;
                 Connect(_storedhost, _storedport);
             }
             _logger.Info("Connected! Beginning to receive data.");
