@@ -220,6 +220,7 @@ namespace AsyncTwitch
             {
                 RoomState newRoomState = new RoomState();
                 RoomStates[channel] = newRoomState;
+                RoomStates[channel].ChannelName = channel;
             }
             SendRawMessage("JOIN #" + channel);
 
