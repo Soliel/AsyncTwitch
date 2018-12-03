@@ -31,6 +31,8 @@ namespace AsyncTwitch
         public bool SubOnly { get; set; }
         //The Id of the Channel
         public string RoomID { get; set; }
+        //The name of the Channel
+        public string ChannelName { get; set; }
 
         public List<ChatUserListing> UserList { get; private set; }
         private Timer _cleaningTimer; //We have to keep a refrence to the timer to avoid garbage collection.
@@ -38,6 +40,7 @@ namespace AsyncTwitch
         public RoomState()
         {
             RoomID = "";
+            ChannelName = "";
             BroadcasterLang = "";
             EmoteOnly = false;
             FollowersOnly = 0;

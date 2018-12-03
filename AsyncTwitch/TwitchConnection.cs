@@ -31,6 +31,7 @@ namespace AsyncTwitch
         private DateTime _lastMessageTime = DateTime.Now;
         private Config _loginInfo;
         private Logger _logger;
+        private int _lastReconnectCount = 0;
 
         public Encoding Utf8NoBom = new UTF8Encoding(false);
         //public RoomState RoomState = new RoomState();
@@ -160,8 +161,18 @@ namespace AsyncTwitch
                 SendRawMessage("NICK " + _loginInfo.Username);
             }
 
-
-            if(_loginInfo.ChannelName != String.Empty) JoinRoom(_loginInfo.ChannelName);
+            if (_reconnectCount > _lastReconnectCount)
+            {
+                _lastReconnectCount = _reconnectCount;
+                foreach (KeyValuePair<string, RoomState> room in RoomStates)
+                {
+                    JoinRoom(room.Key);
+                }
+            }
+            else
+            {
+                if (_loginInfo.ChannelName != String.Empty) JoinRoom(_loginInfo.ChannelName);
+            }
 
             Task.Run(() => OnConnectedTask(this));
         }
@@ -205,10 +216,12 @@ namespace AsyncTwitch
         public void JoinRoom(string channel)
         {
             if (channel != String.Empty) channel = channel.ToLower();
-            if (RoomStates.ContainsKey(channel)) return;
-
-            RoomState newRoomState = new RoomState();
-            RoomStates[channel] = newRoomState;
+            if (!RoomStates.ContainsKey(channel))
+            {
+                RoomState newRoomState = new RoomState();
+                RoomStates[channel] = newRoomState;
+                RoomStates[channel].ChannelName = channel;
+            }
             SendRawMessage("JOIN #" + channel);
 
             Task.Run(() => OnChannelJoinedTask(channel));
@@ -550,6 +563,8 @@ namespace AsyncTwitch
         //Called on UserMessaging to create the ChatUser object.
         public ChatUser CreateChatUser(string chatMsg)
         {
+            //_logger.Log(LogLevel.Debug, $"ChatMessage: {chatMsg}");
+
             ChatUser newUser = new ChatUser();
             MatchCollection badgesCollection = _badgeRX.Matches(chatMsg);
             newUser.Badges = new Badge[badgesCollection.Count];
@@ -561,16 +576,12 @@ namespace AsyncTwitch
                 Badge badge = new Badge(badgeInfo[0], int.Parse(badgeInfo[1]));
                 newUser.Badges[i] = badge;
 
-                newUser.IsBroadcaster = badgeInfo[0] == "broadcaster";
-                newUser.IsSubscriber = badgeInfo[0] == "subscriber";
-                newUser.IsVIP = badgeInfo[0] == "vip";
-
-                i++;
+                if (badge.BadgeName == "broadcaster") newUser.IsBroadcaster = true;
+                if (badge.BadgeName == "vip") newUser.IsVIP = true;
+               i++;
             }
 
-            string[] tagFilteredString = chatMsg.Split(':');
-            tagFilteredString = tagFilteredString[0].Split(';');
-
+            string[] tagFilteredString = chatMsg.Split(new char[] { ' ' }, 2)[0].Substring(1).Split(';');
             foreach (string msgTag in tagFilteredString)
             {
                 string[] tagParts = msgTag.Split('=');
@@ -588,6 +599,12 @@ namespace AsyncTwitch
                         break;
                     case "mod":
                         newUser.IsMod = int.Parse(tagParts[1]) > 0;
+                        break;
+                    case "subscriber":
+                        newUser.IsSubscriber = int.Parse(tagParts[1]) > 0;
+                        break;
+                    case "user-id":
+                        newUser.UserID = tagParts[1];
                         break;
                 }
             }
