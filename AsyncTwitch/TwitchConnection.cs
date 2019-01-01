@@ -372,7 +372,7 @@ namespace AsyncTwitch
             new Regex(@"^:(?<User>[A-Za-z0-9]+)![A-Za-z0-9]+@[A-Za-z0-9]+\.tmi\.twitch\.tv\sPART\s",
                 RegexOptions.Compiled);
 
-        private readonly Regex _badgeRX = new Regex(@"(?<=\@badges=|,)\w+\/\d+", RegexOptions.Compiled);
+        private readonly Regex _badgeRX = new Regex(@"(?<=\@badges=|,)[\w-]+\/\d+", RegexOptions.Compiled);
         private readonly Regex _emoteRX = new Regex(@"(?<=;emotes=)\d+:(\d+-\d+[,/;])+", RegexOptions.Compiled);
 
         private readonly Regex _roomStateRX =
